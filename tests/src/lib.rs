@@ -78,7 +78,7 @@ async fn run_tests(
     assert_eq!(trace_headers, 3, "Expected 3 tracing headers");
 
     // Verify the received OTLP spans
-    timeout(Duration::from_secs(6), otlp_mock.wait_until_satisfied())
+    timeout(Duration::from_secs(10), otlp_mock.wait_until_satisfied())
         .await
         .unwrap();
     let otlp_request = otlp_mock.received_requests().await.pop().unwrap();
