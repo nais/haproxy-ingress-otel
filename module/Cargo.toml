@@ -8,6 +8,6 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-haproxy-api = { version = "0.8" }
+haproxy-api = { version = "0.9" }
 haproxy-otel = { path = ".." }
-mlua = "0.9"
+mlua = "0.11.1"

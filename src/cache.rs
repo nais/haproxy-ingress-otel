@@ -17,7 +17,7 @@ pub(crate) fn get_context(txn: &Txn) -> Option<Context> {
     let trace_id = txn.get_var::<LuaString>("txn.otel_trace_id").ok()?;
     TRACE_CACHE
         .get_or_init(init_cache)
-        .get(trace_id.to_str().ok()?)
+        .get(&*trace_id.to_str().ok()?)
 }
 
 // Store the context in the globally cache to share it between listeners/frontends

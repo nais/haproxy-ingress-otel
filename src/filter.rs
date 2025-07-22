@@ -82,12 +82,12 @@ impl TraceFilter {
         span.add_event("received response headers", vec![]);
 
         let stline = msg.get_stline()?;
-        let status = stline.raw_get::<_, i64>("code").unwrap_or_default();
+        let status = stline.raw_get::<i64>("code").unwrap_or_default();
         span.set_attribute(KeyValue::new(HTTP_RESPONSE_STATUS_CODE, status));
         if status < 500 {
             span.set_status(trace::Status::Ok);
         } else {
-            span.set_status(trace::Status::error(stline.raw_get::<_, String>("reason")?));
+            span.set_status(trace::Status::error(stline.raw_get::<String>("reason")?));
         }
 
         let srv_name = txn.f.get_str("srv_name", ())?;
@@ -102,14 +102,11 @@ impl UserFilter for TraceFilter {
 
     fn new(_lua: &Lua, args: LuaTable) -> LuaResult<Self> {
         let mut this = Self::default();
-        if let Ok(args) = args.get::<_, String>(1) {
+        if let Ok(args) = args.get::<String>(1) {
             for arg in args.split(';') {
                 let (name, value) = arg.split_once('=').unwrap_or_default();
-                match name {
-                    "start_client_span" => {
-                        this.start_client_span = Some(value.parse().unwrap_or(true));
-                    }
-                    _ => {}
+                if name == "start_client_span" {
+                    this.start_client_span = Some(value.parse().unwrap_or(true));
                 }
             }
         }
@@ -143,7 +140,7 @@ impl UserFilter for TraceFilter {
             remove_context(self.trace_id.unwrap());
 
             let span = self.parent_context.span();
-            let status = (txn.f.get::<_, Option<i64>>("txn_status", ())?).unwrap_or_default();
+            let status = (txn.f.get::<Option<i64>>("txn_status", ())?).unwrap_or_default();
             span.set_attribute(KeyValue::new(HTTP_RESPONSE_STATUS_CODE, status));
             if status < 500 {
                 span.set_status(trace::Status::Ok);
@@ -152,7 +149,7 @@ impl UserFilter for TraceFilter {
             }
 
             let termination_state =
-                (txn.f.get::<_, Option<String>>("txn_sess_term_state", ()))?.unwrap_or_default();
+                (txn.f.get::<Option<String>>("txn_sess_term_state", ()))?.unwrap_or_default();
             span.set_attribute(KeyValue::new(
                 "haproxy.termination_state",
                 termination_state,
@@ -165,18 +162,18 @@ impl UserFilter for TraceFilter {
     }
 }
 
-struct HeaderInjector<'a, 'b> {
-    msg: &'a HttpMessage<'b>,
+struct HeaderInjector<'a> {
+    msg: &'a HttpMessage,
     silent_on: bool,
 }
 
-impl<'a, 'b> HeaderInjector<'a, 'b> {
-    fn new(msg: &'a HttpMessage<'b>, silent_on: bool) -> Self {
+impl<'a> HeaderInjector<'a> {
+    fn new(msg: &'a HttpMessage, silent_on: bool) -> Self {
         Self { msg, silent_on }
     }
 }
 
-impl Injector for HeaderInjector<'_, '_> {
+impl Injector for HeaderInjector<'_> {
     fn set(&mut self, key: &str, value: String) {
         if self.silent_on && key.eq_ignore_ascii_case("x-b3-sampled") {
             return;

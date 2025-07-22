@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::future::Future;
-use std::pin::Pin;
 use std::time::Duration;
 
 use opentelemetry_sdk::runtime::{Runtime, RuntimeChannel, Tokio};
@@ -15,20 +14,12 @@ impl HaproxyTokio {
 }
 
 impl Runtime for HaproxyTokio {
-    type Interval = <Tokio as opentelemetry_sdk::runtime::Runtime>::Interval;
-    type Delay = <Tokio as opentelemetry_sdk::runtime::Runtime>::Delay;
-
-    fn interval(&self, duration: Duration) -> Self::Interval {
-        let _guard = haproxy_api::runtime().enter();
-        self.0.interval(duration)
-    }
-
-    fn spawn(&self, future: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
+    fn spawn<F: Future<Output = ()> + Send + 'static>(&self, future: F) {
         let _guard = haproxy_api::runtime().enter();
         self.0.spawn(future);
     }
 
-    fn delay(&self, duration: Duration) -> Self::Delay {
+    fn delay(&self, duration: Duration) -> impl Future<Output = ()> + Send + 'static {
         let _guard = haproxy_api::runtime().enter();
         self.0.delay(duration)
     }

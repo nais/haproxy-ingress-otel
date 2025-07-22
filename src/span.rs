@@ -73,9 +73,9 @@ fn tracing_headers2map(headers: haproxy_api::Headers) -> LuaResult<HashMap<Strin
             || nameb.starts_with(b"uber")
         {
             let name = name.to_string_lossy();
-            let value = value.get::<_, LuaString>(0);
+            let value = value.get::<LuaString>(0);
             if let Ok(value) = value.as_ref().map(|v| v.to_string_lossy()) {
-                map.insert(name.into_owned(), value.into_owned());
+                map.insert(name, value);
             }
         }
         Ok(())

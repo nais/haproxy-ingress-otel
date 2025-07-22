@@ -6,12 +6,12 @@ pub(crate) use cache::{get_context, remove_context, store_context};
 pub fn register(lua: &Lua, options: LuaTable) -> LuaResult<()> {
     let core = Core::new(lua)?;
 
-    let service_name = (options.get::<_, String>("name")).unwrap_or_else(|_| "haproxy".to_string());
-    let sampler = (options.get::<_, Option<String>>("sampler")).unwrap_or_default();
-    let propagator = (options.get::<_, Option<String>>("propagator")).unwrap_or_default();
-    let otlp = (options.get::<_, LuaTable>("otlp")).unwrap_or_else(|_| lua.create_table().unwrap());
-    let endpoint = (otlp.get::<_, Option<String>>("endpoint")).unwrap_or_default();
-    let protocol = (otlp.get::<_, Option<String>>("protocol")).unwrap_or_default();
+    let service_name = (options.get::<String>("name")).unwrap_or_else(|_| "haproxy".to_string());
+    let sampler = (options.get::<Option<String>>("sampler")).unwrap_or_default();
+    let propagator = (options.get::<Option<String>>("propagator")).unwrap_or_default();
+    let otlp = (options.get::<LuaTable>("otlp")).unwrap_or_else(|_| lua.create_table().unwrap());
+    let endpoint = (otlp.get::<Option<String>>("endpoint")).unwrap_or_default();
+    let protocol = (otlp.get::<Option<String>>("protocol")).unwrap_or_default();
 
     let options = exporter::Options {
         service_name: service_name.clone(),
