@@ -12,8 +12,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends software-properties-common
-          sudo add-apt-repository ppa:vbernat/haproxy-3.0 -y
-          sudo apt-get install haproxy=3.0.\*
+          sudo add-apt-repository ppa:vbernat/haproxy-3.2 -y
+          sudo apt-get install haproxy=3.2.\*
         shell: bash
       - name: Run tests
         run: |
