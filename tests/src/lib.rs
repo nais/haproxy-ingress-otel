@@ -41,6 +41,7 @@ async fn integration_tests() {
     // Spawn haproxy and wait
     let mut haproxy = tokio::process::Command::new("haproxy")
         .args(&["-f", "haproxy.cfg"])
+        .kill_on_drop(true)
         .spawn()
         .expect("Failed to start haproxy");
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -103,12 +104,25 @@ async fn run_tests(
         .find(|span| span["kind"].as_i64() == Some(2))
         .expect("Server span (kind=2) not found");
 
-    // Verify service name
-    let service_name = spans
-        .pointer("/resourceSpans/0/resource/attributes/0/value/stringValue")
+    let attributes = spans
+        .pointer("/resourceSpans/0/resource/attributes")
+        .unwrap();
+
+    // Verify `service.name`
+    let service_name = find_attribute(attributes, "service.name")
+        .expect("Could not find service name")
+        .pointer("/value/stringValue")
         .and_then(|v| v.as_str())
-        .expect("Could not find service name");
+        .unwrap();
     assert_eq!(service_name, "haproxy", "Service name should be 'haproxy'");
+
+    // Verify `telemetry.sdk.language`
+    let sdk_language = find_attribute(attributes, "telemetry.sdk.language")
+        .expect("Could not find telemetry.sdk.language")
+        .pointer("/value/stringValue")
+        .and_then(|v| v.as_str())
+        .unwrap();
+    assert_eq!(sdk_language, "rust", "SDK language should be 'rust'");
 
     // Verify span relationship (parent-child)
     assert_eq!(
@@ -135,4 +149,10 @@ async fn run_tests(
     );
 
     Ok(())
+}
+
+fn find_attribute<'a>(attributes: &'a JsonValue, key: &str) -> Option<&'a JsonValue> {
+    (attributes.as_array()?)
+        .iter()
+        .find(|attr| attr["key"] == key)
 }
