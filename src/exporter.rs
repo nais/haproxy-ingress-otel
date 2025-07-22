@@ -52,7 +52,7 @@ pub fn init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'st
         .with_span_processor(processor)
         .with_id_generator(RandomIdGenerator::default())
         .with_resource(
-            Resource::builder_empty()
+            Resource::builder()
                 .with_service_name(options.service_name)
                 .build(),
         );
