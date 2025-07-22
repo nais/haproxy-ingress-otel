@@ -48,7 +48,7 @@ local opentelemetry = require("haproxy_otel_module")
 opentelemetry.register({
     name = "loadbalancer",  -- Service name
     sampler = "AlwaysOn",  -- Sampling strategy
-    propagator = "zipkin",  -- Propagation format
+    propagator = "w3c",  -- Propagation format
     otlp = {
         endpoint = "http://otel-collector:4317/v1/trace",  -- OTLP endpoint
         protocol = "json",  -- Protocol format (json or binary)
@@ -62,7 +62,7 @@ opentelemetry.register({
 | --------------- | -------------------------------- | -------------------------------------------- | ---------------------------------- |
 | `name`          | Service name for the traces      | String                                       | `"haproxy"`                        |
 | `sampler`       | Sampling strategy                | `"AlwaysOn"`, `"AlwaysOff"`, `"ParentBased"` | `"ParentBased"`                    |
-| `propagator`    | Trace context propagation format | `"zipkin"`, `"jaeger"`                       | `"zipkin"`                         |
+| `propagator`    | Trace context propagation format | `"w3c"`, `"zipkin"`, `"jaeger"`              | `"w3c"`                            |
 | `otlp.endpoint` | OTLP collector endpoint URL      | URL string                                   | `"http://localhost:4318/v1/trace"` |
 | `otlp.protocol` | OTLP protocol format             | `"json"`, `"binary"`                         | `"binary"`                         |
 

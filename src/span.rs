@@ -68,8 +68,8 @@ fn tracing_headers2map(headers: haproxy_api::Headers) -> LuaResult<HashMap<Strin
     headers.for_each::<LuaString, LuaTable>(|name, value| {
         let nameb = name.as_bytes();
         if nameb == b"host"
-            || nameb == b"b3"
-            || nameb.starts_with(b"x-b3")
+            || (nameb == b"traceparent" || nameb == b"tracestate")
+            || (nameb == b"b3" || nameb.starts_with(b"x-b3"))
             || nameb.starts_with(b"uber")
         {
             let name = name.to_string_lossy();

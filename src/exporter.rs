@@ -2,6 +2,7 @@ use std::error::Error as StdError;
 
 use opentelemetry_jaeger_propagator as opentelemetry_jaeger;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::span_processor_with_async_runtime::BatchSpanProcessor;
 use opentelemetry_sdk::trace::{RandomIdGenerator, Sampler, SdkTracerProvider};
 use opentelemetry_sdk::Resource;
@@ -11,7 +12,7 @@ pub(crate) struct Options {
     pub(crate) service_name: String,
     // Can be: "AlwaysOn", "SilentOn", "AlwaysOff", "ParentBased"
     pub(crate) sampler: Option<String>,
-    // Can be: "jaeger", "zipkin"
+    // Can be: "w3c", "jaeger", "zipkin"
     pub(crate) propagator: Option<String>,
     pub(crate) endpoint: Option<String>,
     // Can be: "binary" or "json"
@@ -20,7 +21,10 @@ pub(crate) struct Options {
 
 pub fn init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'static>> {
     match options.propagator.as_deref() {
-        None | Some("zipkin") => {
+        None | Some("w3c") => {
+            opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
+        }
+        Some("zipkin") => {
             opentelemetry::global::set_text_map_propagator(opentelemetry_zipkin::Propagator::new());
         }
         Some("jaeger") => {
