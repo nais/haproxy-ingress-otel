@@ -13,7 +13,6 @@ use crate::{get_context, remove_context};
 pub(crate) struct TraceFilter {
     start_client_span: Option<bool>,
     context: Context,
-    level: u32,
 }
 
 impl TraceFilter {
@@ -96,8 +95,7 @@ impl TraceFilter {
 }
 
 impl UserFilter for TraceFilter {
-    const METHODS: u8 =
-        FilterMethod::START_ANALYZE | FilterMethod::END_ANALYZE | FilterMethod::HTTP_HEADERS;
+    const METHODS: u8 = FilterMethod::END_ANALYZE | FilterMethod::HTTP_HEADERS;
 
     fn new(_lua: &Lua, args: LuaTable) -> LuaResult<Self> {
         let mut this = Self::default();
@@ -120,14 +118,6 @@ impl UserFilter for TraceFilter {
         }
     }
 
-    fn start_analyze(&mut self, _lua: &Lua, txn: Txn, chn: Channel) -> LuaResult<FilterResult> {
-        if !chn.is_resp()? {
-            self.level = txn.get_var("txn.__otel_filter_level").unwrap_or(0);
-            txn.set_var("txn.__otel_filter_level", self.level + 1)?;
-        }
-        Ok(FilterResult::Continue)
-    }
-
     fn end_analyze(&mut self, _lua: &Lua, txn: Txn, chn: Channel) -> LuaResult<FilterResult> {
         if chn.is_resp()? {
             // Finish client span
@@ -139,7 +129,6 @@ impl UserFilter for TraceFilter {
             if !txn
                 .get_var::<bool>("txn.__otel_server_span")
                 .unwrap_or_default()
-                || self.level > 0
             {
                 return Ok(FilterResult::Continue);
             }
