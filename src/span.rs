@@ -11,6 +11,7 @@ use opentelemetry_semantic_conventions::trace::{
 
 use crate::{get_context, store_context};
 
+/// Starts a server span for the current transaction.
 pub(crate) fn start_server_span(_lua: &Lua, txn: Txn) -> LuaResult<()> {
     let tracer = opentelemetry::global::tracer("haproxy-otel");
     let http = txn.http()?;

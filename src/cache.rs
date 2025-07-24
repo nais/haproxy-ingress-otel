@@ -29,7 +29,10 @@ pub(crate) fn store_context(txn: &Txn, trace_id: TraceId, context: Context) {
         .insert(trace_id, context);
 }
 
-pub(crate) fn remove_context(trace_id: TraceId) {
-    let trace_id = const_hex::encode(trace_id.to_bytes());
-    TRACE_CACHE.get_or_init(init_cache).remove(&trace_id);
+pub(crate) fn remove_context(txn: &Txn) -> Option<Context> {
+    let trace_id = txn.get_var::<LuaString>("txn.otel_trace_id").ok()?;
+    TRACE_CACHE
+        .get_or_init(init_cache)
+        .remove(&*trace_id.to_str().ok()?)
+        .map(|(_, context)| context)
 }

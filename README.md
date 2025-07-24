@@ -9,9 +9,9 @@ A Rust-based [OpenTelemetry] module for [HAProxy] Community Edition using the [L
 ## Features
 
 - Server-side and client-side span creation
-- Custom attribute support
+- Custom attributes support
 - OTLP exporter
-- Support for Zipkin and Jaeger headers propagation formats
+- Support for W3C/Zipkin/Jaeger headers propagation formats
 
 ## Usage and Configuration
 
@@ -31,12 +31,12 @@ global
 frontend http-in
     bind *:8080
     http-request lua.start_server_span
+    filter lua.opentelemetry-trace
     http-request set-var-fmt(txn.custom_attr_value) "hello"
     http-request lua.set_span_attribute_var test_attribute txn.custom_attr_value
     default_backend default
 
 backend default
-    filter lua.opentelemetry-trace
     server srv1 127.0.0.1:8080
 ```
 
@@ -76,6 +76,7 @@ filter lua.opentelemetry-trace start_client_span=true
 ```
 
 The `http-request` directive is required to start a new span and `filter` is responsible for (optional) client-side (upstream) span creation and finishing all the spans.
+Both directives are needed to create a complete trace for the request.
 
 
 | Option              | Description                    | Values          | Default |

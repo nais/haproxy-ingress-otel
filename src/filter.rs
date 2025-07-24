@@ -2,7 +2,7 @@ use haproxy_api::{Channel, FilterMethod, FilterResult, HttpMessage, Txn, UserFil
 use mlua::prelude::{Lua, LuaResult, LuaTable};
 use opentelemetry::propagation::Injector;
 use opentelemetry::trace::{self, TraceContextExt, Tracer};
-use opentelemetry::{Context, KeyValue, TraceId};
+use opentelemetry::{Context, KeyValue};
 use opentelemetry_semantic_conventions::trace::{
     HTTP_REQUEST_METHOD, HTTP_RESPONSE_STATUS_CODE, URL_PATH, URL_QUERY,
 };
@@ -12,9 +12,8 @@ use crate::{get_context, remove_context};
 #[derive(Default)]
 pub(crate) struct TraceFilter {
     start_client_span: Option<bool>,
-    trace_id: Option<TraceId>,
-    parent_context: Context,
     context: Context,
+    level: u32,
 }
 
 impl TraceFilter {
@@ -28,11 +27,10 @@ impl TraceFilter {
         let tracer = opentelemetry::global::tracer("haproxy-otel");
 
         // Find parent context (if any)
-        self.parent_context = match get_context(&txn) {
+        let parent_context = match get_context(&txn) {
             Some(cx) => cx,
             None => return Ok(FilterResult::Continue),
         };
-        self.trace_id = Some(self.parent_context.span().span_context().trace_id());
 
         // Skip client span creation if this option is disabled
         if self.start_client_span == Some(false) {
@@ -51,8 +49,8 @@ impl TraceFilter {
                 KeyValue::new(URL_PATH, uri_parts.next().unwrap_or_default()),
                 KeyValue::new(URL_QUERY, uri_parts.next().unwrap_or_default()),
             ]);
-        let span = tracer.build_with_context(span_builder, &self.parent_context);
-        self.context = self.parent_context.with_span(span);
+        let span = tracer.build_with_context(span_builder, &parent_context);
+        self.context = parent_context.with_span(span);
 
         // Inject tracing headers
         let silent_on = lua
@@ -73,7 +71,7 @@ impl TraceFilter {
         txn: Txn,
         msg: HttpMessage,
     ) -> LuaResult<FilterResult> {
-        // Skip this logic is client span creation is disabled
+        // Skip this logic if client span creation is disabled
         if self.start_client_span == Some(false) {
             return Ok(FilterResult::Continue);
         }
@@ -98,7 +96,8 @@ impl TraceFilter {
 }
 
 impl UserFilter for TraceFilter {
-    const METHODS: u8 = FilterMethod::END_ANALYZE | FilterMethod::HTTP_HEADERS;
+    const METHODS: u8 =
+        FilterMethod::START_ANALYZE | FilterMethod::END_ANALYZE | FilterMethod::HTTP_HEADERS;
 
     fn new(_lua: &Lua, args: LuaTable) -> LuaResult<Self> {
         let mut this = Self::default();
@@ -121,6 +120,14 @@ impl UserFilter for TraceFilter {
         }
     }
 
+    fn start_analyze(&mut self, _lua: &Lua, txn: Txn, chn: Channel) -> LuaResult<FilterResult> {
+        if !chn.is_resp()? {
+            self.level = txn.get_var("txn.__otel_filter_level").unwrap_or(0);
+            txn.set_var("txn.__otel_filter_level", self.level + 1)?;
+        }
+        Ok(FilterResult::Continue)
+    }
+
     fn end_analyze(&mut self, _lua: &Lua, txn: Txn, chn: Channel) -> LuaResult<FilterResult> {
         if chn.is_resp()? {
             // Finish client span
@@ -128,18 +135,20 @@ impl UserFilter for TraceFilter {
                 self.context.span().end();
             }
 
-            // Finish server span
+            // Finish server span when all filters are done
             if !txn
                 .get_var::<bool>("txn.__otel_server_span")
                 .unwrap_or_default()
-                || self.trace_id.is_none()
+                || self.level > 0
             {
                 return Ok(FilterResult::Continue);
             }
 
-            remove_context(self.trace_id.unwrap());
-
-            let span = self.parent_context.span();
+            let parent_context = match remove_context(&txn) {
+                Some(cx) => cx,
+                None => return Ok(FilterResult::Continue),
+            };
+            let span = parent_context.span();
             let status = (txn.f.get::<Option<i64>>("txn_status", ())?).unwrap_or_default();
             span.set_attribute(KeyValue::new(HTTP_RESPONSE_STATUS_CODE, status));
             if status < 500 {
@@ -148,6 +157,10 @@ impl UserFilter for TraceFilter {
                 span.set_status(trace::Status::error("5xx status code"));
             }
 
+            let fe_name = txn.f.get_str("fe_name", ())?;
+            span.set_attribute(KeyValue::new("haproxy.frontend.name", fe_name));
+            let be_name = txn.f.get_str("be_name", ())?;
+            span.set_attribute(KeyValue::new("haproxy.backend.name", be_name));
             let termination_state =
                 (txn.f.get::<Option<String>>("txn_sess_term_state", ()))?.unwrap_or_default();
             span.set_attribute(KeyValue::new(

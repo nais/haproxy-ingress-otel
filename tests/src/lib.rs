@@ -22,22 +22,6 @@ async fn integration_tests() {
     let listener = TcpListener::bind("127.0.0.1:4317").unwrap();
     let mock_server = MockServer::builder().listener(listener).start().await;
 
-    // Set up the mock for OTLP traces endpoint
-    let otlp_mock = Mock::given(method("POST"))
-        .and(path("/v1/trace"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"accepted": true})))
-        .expect(1)
-        .mount_as_scoped(&mock_server)
-        .await;
-
-    // Set up the mock for regular HTTP requests (for testing propagation)
-    let http_mock = Mock::given(method("GET"))
-        .and(path("/test"))
-        .respond_with(ResponseTemplate::new(200).set_body_string("Hello from test server"))
-        .expect(1)
-        .mount_as_scoped(&mock_server)
-        .await;
-
     // Spawn haproxy and wait
     let mut haproxy = tokio::process::Command::new("haproxy")
         .args(&["-f", "haproxy.cfg"])
@@ -47,17 +31,35 @@ async fn integration_tests() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // Run the tests
-    run_tests(&otlp_mock, &http_mock)
-        .await
-        .expect("Tests failed");
+    run_tests(&mock_server).await.expect("Tests failed");
 
     haproxy.kill().await.expect("Failed to stop haproxy");
 }
 
-async fn run_tests(
-    otlp_mock: &MockGuard,
-    http_mock: &MockGuard,
-) -> Result<(), Box<dyn std::error::Error>> {
+/// Set up the scoped mock for regular HTTP requests (for testing propagation)
+async fn mount_http_mock(server: &MockServer) -> MockGuard {
+    Mock::given(method("GET"))
+        .and(path("/test"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("Hello from test server"))
+        .expect(1)
+        .mount_as_scoped(&server)
+        .await
+}
+
+/// Set up the scoped mock for OTLP traces endpoint
+async fn mount_otlp_mock(server: &MockServer) -> MockGuard {
+    Mock::given(method("POST"))
+        .and(path("/v1/trace"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"accepted": true})))
+        .expect(1)
+        .mount_as_scoped(&server)
+        .await
+}
+
+async fn run_tests(server: &MockServer) -> Result<(), Box<dyn std::error::Error>> {
+    let http_mock = mount_http_mock(server).await;
+    let mut otlp_mock = mount_otlp_mock(server).await;
+
     // Make a request to HAProxy
     let client = reqwest::Client::new();
     let response = client
@@ -109,19 +111,11 @@ async fn run_tests(
         .unwrap();
 
     // Verify `service.name`
-    let service_name = find_attribute(attributes, "service.name")
-        .expect("Could not find service name")
-        .pointer("/value/stringValue")
-        .and_then(|v| v.as_str())
-        .unwrap();
+    let service_name = find_attribute(attributes, "service.name").unwrap();
     assert_eq!(service_name, "haproxy", "Service name should be 'haproxy'");
 
     // Verify `telemetry.sdk.language`
-    let sdk_language = find_attribute(attributes, "telemetry.sdk.language")
-        .expect("Could not find telemetry.sdk.language")
-        .pointer("/value/stringValue")
-        .and_then(|v| v.as_str())
-        .unwrap();
+    let sdk_language = find_attribute(attributes, "telemetry.sdk.language").unwrap();
     assert_eq!(sdk_language, "rust", "SDK language should be 'rust'");
 
     // Verify span relationship (parent-child)
@@ -137,22 +131,49 @@ async fn run_tests(
     );
 
     // Verify custom attribute on server span
-    let has_custom_attr = (server_span["attributes"].as_array().unwrap())
-        .iter()
-        .any(|attr| {
-            attr["key"].as_str() == Some("test_attribute")
-                && attr["value"]["stringValue"].as_str() == Some("hello")
-        });
-    assert!(
-        has_custom_attr,
-        "Server span missing custom attribute 'test_attribute' with value 'hello'"
+    let test_attribute = find_attribute(&server_span["attributes"], "test_attribute").unwrap();
+    assert_eq!(
+        test_attribute, "hello",
+        "Server span should have custom attribute 'test_attribute' with value 'hello'"
     );
+
+    // --------
+
+    otlp_mock = mount_otlp_mock(server).await;
+
+    // Make a _local_ request to HAProxy (non-proxied)
+    let response = client.get("http://localhost:8080/status").send().await?;
+    assert_eq!(response.status(), 200);
+
+    // Verify the received OTLP spans
+    timeout(Duration::from_secs(10), otlp_mock.wait_until_satisfied())
+        .await
+        .unwrap();
+    let otlp_request = otlp_mock.received_requests().await.pop().unwrap();
+    let spans = otlp_request.body_json::<JsonValue>().unwrap();
+
+    // Get the spans array
+    let spans_array = spans
+        .pointer("/resourceSpans/0/scopeSpans/0/spans")
+        .and_then(|s| s.as_array())
+        .expect("Could not find spans array");
+
+    // Verify we have exactly 1 spans
+    assert_eq!(spans_array.len(), 1);
+
+    // Check that frontend/backend names are set correctly
+    let span = &spans_array[0];
+    let frontend = find_attribute(&span["attributes"], "haproxy.frontend.name").unwrap();
+    assert_eq!(frontend, "http-in", "Frontend name should be 'http-in'");
+    let backend = find_attribute(&span["attributes"], "haproxy.backend.name").unwrap();
+    assert_eq!(backend, "status", "Backend name should be 'status'");
 
     Ok(())
 }
 
-fn find_attribute<'a>(attributes: &'a JsonValue, key: &str) -> Option<&'a JsonValue> {
+fn find_attribute<'a>(attributes: &'a JsonValue, key: &str) -> Option<&'a str> {
     (attributes.as_array()?)
         .iter()
         .find(|attr| attr["key"] == key)
+        .and_then(|attr| attr.pointer("/value/stringValue").and_then(|v| v.as_str()))
 }
