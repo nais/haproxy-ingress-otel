@@ -48,11 +48,30 @@ kind load docker-image "$IMAGE_NAME" --name "$CLUSTER_NAME"
 echo "==> Applying Kubernetes manifests..."
 kubectl apply -f "$SCRIPT_DIR/k8s/"
 
+echo "==> Checking initial pod status..."
+sleep 5
+kubectl get pods -A
+
 echo "==> Waiting for Jaeger to be ready..."
 kubectl wait --for=condition=available --timeout=120s deployment/jaeger -n haproxy-otel-e2e
 
 echo "==> Waiting for HAProxy Ingress to be ready..."
-kubectl wait --for=condition=available --timeout=120s deployment/haproxy-ingress -n haproxy-ingress
+if ! kubectl wait --for=condition=available --timeout=180s deployment/haproxy-ingress -n haproxy-ingress; then
+    echo "==> HAProxy Ingress failed to become ready. Debugging info:"
+    echo ""
+    echo "Pod status:"
+    kubectl get pods -n haproxy-ingress -o wide
+    echo ""
+    echo "Pod describe:"
+    kubectl describe pods -n haproxy-ingress -l app=haproxy-ingress
+    echo ""
+    echo "Pod logs:"
+    kubectl logs -n haproxy-ingress -l app=haproxy-ingress --all-containers --tail=100 || true
+    echo ""
+    echo "Events:"
+    kubectl get events -n haproxy-ingress --sort-by='.lastTimestamp'
+    exit 1
+fi
 
 echo "==> Waiting for echo-server to be ready..."
 kubectl wait --for=condition=available --timeout=60s deployment/echo-server -n haproxy-otel-e2e
