@@ -113,22 +113,28 @@ spec:
               value: always_on
             - name: OTEL_PROPAGATORS
               value: w3c
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 1042
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
           livenessProbe:
             httpGet:
               path: /healthz
               port: 1042
-            initialDelaySeconds: 60
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /healthz
               port: 1042
-            initialDelaySeconds: 30
             periodSeconds: 5
-            timeoutSeconds: 5
-            failureThreshold: 12
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             requests:
               cpu: 100m
