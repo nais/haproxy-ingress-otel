@@ -1,72 +1,68 @@
 # E2E Tests
 
-Two test modes are available:
+End-to-end tests using Kind (Kubernetes in Docker) to test the HAProxy Kubernetes Ingress Controller with OpenTelemetry tracing.
 
-## Docker Compose (HAProxy Standalone)
-
-Tests the OTEL module with HAProxy directly (no Kubernetes).
-
-### Interactive Mode (for development/debugging)
-
-Run the services and keep them running to explore traces:
+## Running Tests
 
 ```bash
-# Build the image first (if needed)
-cd .. && docker build -t haproxy-otel:test .
+# Run e2e tests (builds image if needed)
+./e2e/e2e.sh
 
-# Start services
-cd e2e
-docker compose up -d
+# Skip build, use existing image
+BUILD=0 ./e2e/e2e.sh
 
-# Generate some traffic
-curl http://localhost:8080/
-curl http://localhost:8080/health
-
-# View traces in Jaeger UI
-open http://localhost:16686
-
-# Follow logs
-docker compose logs -f haproxy
-
-# Stop when done
-docker compose down
+# Force rebuild
+BUILD=1 ./e2e/e2e.sh
 ```
 
-### Automated Test Mode
+The test:
 
-Runs the full test suite and exits:
+1. Creates a Kind cluster
+2. Deploys Jaeger for trace collection
+3. Deploys HAProxy Ingress Controller with OTEL module
+4. Deploys a test echo-server with Ingress
+5. Sends HTTP requests through the ingress
+6. Verifies traces appear in Jaeger
 
-```bash
-# Build and run (first time or after changes)
-BUILD=1 ./run.sh
-
-# Run with existing image
-./run.sh
-```
-
-**Endpoints:**
-- HAProxy: http://localhost:8080
-- HAProxy stats: http://localhost:8404/stats
-- Jaeger UI: http://localhost:16686
-
-## Kind (Kubernetes Ingress Controller)
-
-Tests the full HAProxy Kubernetes Ingress Controller with OTEL:
-
-```bash
-# Build and run (first time or after changes)
-BUILD=1 ./kind-e2e.sh
-
-# Run with existing image
-./kind-e2e.sh
-```
-
-The kind cluster is automatically deleted after the test.
+The Kind cluster is automatically deleted after the test.
 
 ## Platform Support
 
-Both scripts auto-detect the platform:
-- **macOS ARM64** (Apple Silicon): Builds for `linux/arm64`, auto-detects Colima
-- **Linux x86_64** (CI): Builds for `linux/amd64`
+The script runs identically locally and in CI:
 
-Set `DOCKER_HOST` manually if using a non-default Docker socket.
+- **Local (macOS ARM64)**: Auto-detects Colima, builds for `linux/arm64`
+- **CI (Linux x86_64)**: Builds for `linux/amd64`
+
+Override the platform if needed:
+
+```bash
+PLATFORM=linux/amd64 ./e2e/e2e.sh
+```
+
+## Debugging
+
+If tests fail, the script outputs:
+
+- Pod status
+- Pod descriptions
+- Container logs
+- Kubernetes events
+
+To run interactively for debugging:
+
+```bash
+# Create cluster and deploy
+BUILD=0 ./e2e/e2e.sh &
+# Ctrl+C after deployment succeeds
+
+# Inspect manually
+kubectl get pods -A
+kubectl logs -n haproxy-ingress -l app=haproxy-ingress -f
+
+# Access Jaeger UI
+kubectl port-forward -n haproxy-otel-e2e svc/jaeger 16686:16686
+open http://localhost:16686
+
+# Cleanup
+kind delete cluster --name haproxy-otel-e2e
+```
