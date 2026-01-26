@@ -1,0 +1,36 @@
+services:
+  haproxy:
+    image: haproxy-otel:test
+    pull_policy: never
+    platform: ${PLATFORM:-linux/amd64}
+    user: root
+    entrypoint: ["haproxy", "-f", "/usr/local/etc/haproxy/haproxy.cfg", "-W"]
+    ports:
+      - "8080:8080"
+      - "8404:8404"
+    environment:
+      OTEL_SERVICE_NAME: haproxy-e2e-test
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_PROPAGATORS: w3c
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - jaeger
+      - backend
+
+  backend:
+    image: hashicorp/http-echo:latest
+    platform: ${PLATFORM:-linux/amd64}
+    command: ["-text=Hello from backend!", "-listen=:5678"]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    platform: ${PLATFORM:-linux/amd64}
+    ports:
+      - "16686:16686"  # Jaeger UI
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      QUERY_UI_CONFIG: "/etc/jaeger/jaeger-ui.json"
+    volumes:
+      - ./jaeger-ui.json:/etc/jaeger/jaeger-ui.json:ro

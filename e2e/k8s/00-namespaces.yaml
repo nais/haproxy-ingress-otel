@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: haproxy-otel-e2e
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: haproxy-ingress

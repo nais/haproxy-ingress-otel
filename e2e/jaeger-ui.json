@@ -1,0 +1,39 @@
+{
+  "monitor": {
+    "menuEnabled": true
+  },
+  "dependencies": {
+    "menuEnabled": true
+  },
+  "archiveEnabled": false,
+  "tracking": {
+    "gaID": "",
+    "trackErrors": false
+  },
+  "menu": [
+    {
+      "label": "HAProxy Stats",
+      "items": [
+        {
+          "label": "Stats Dashboard",
+          "url": "http://localhost:8404/stats"
+        }
+      ]
+    }
+  ],
+  "search": {
+    "maxLookback": {
+      "label": "2 Days",
+      "value": "2d"
+    },
+    "maxLimit": 1500
+  },
+  "linkPatterns": [
+    {
+      "type": "tags",
+      "key": "haproxy.frontend.name",
+      "url": "http://localhost:8404/stats",
+      "text": "View HAProxy Stats"
+    }
+  ]
+}

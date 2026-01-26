@@ -14,11 +14,189 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   HAPROXY_VERSION: "3.2.4"
+  CARGO_TERM_COLOR: always
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-lint-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (module only)
+        run: |
+          # Remove tests from workspace members
+          sed -i 's/, "tests"//' Cargo.toml
+          sed -i 's/"tests", //' Cargo.toml
+          cargo clippy -p haproxy-otel-module --all-targets -- -D warnings
+
+  test:
+    name: Test OTEL Module
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image (amd64 only)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: haproxy-otel:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Test OTEL module loads correctly
+        run: |
+          docker run --rm --user root --entrypoint sh haproxy-otel:test -c '
+          cat > /tmp/test.cfg << "EOF"
+          global
+              tune.lua.bool-sample-conversion pre-3.1-bug
+              master-worker
+              insecure-fork-wanted
+              lua-load-per-thread /etc/haproxy/lua/otel.lua
+
+          defaults
+              mode http
+              timeout connect 5s
+              timeout client 5s
+              timeout server 5s
+
+          frontend test
+              bind :8080
+              http-request lua.start_server_span
+              filter lua.opentelemetry-trace
+              default_backend default
+
+          backend default
+              server srv1 127.0.0.1:8081
+          EOF
+          haproxy -c -f /tmp/test.cfg 2>&1
+          '
+
+      - name: Verify OTEL initialization output
+        run: |
+          OUTPUT=$(docker run --rm --user root --entrypoint sh \
+            -e OTEL_SERVICE_NAME=test-service \
+            -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+            haproxy-otel:test -c '
+            cat > /tmp/test.cfg << "EOF"
+          global
+              tune.lua.bool-sample-conversion pre-3.1-bug
+              master-worker
+              insecure-fork-wanted
+              lua-load-per-thread /etc/haproxy/lua/otel.lua
+
+          defaults
+              mode http
+              timeout connect 5s
+              timeout client 5s
+              timeout server 5s
+
+          frontend test
+              bind :8080
+              http-request lua.start_server_span
+              filter lua.opentelemetry-trace
+              default_backend default
+
+          backend default
+              server srv1 127.0.0.1:8081
+          EOF
+          haproxy -c -f /tmp/test.cfg 2>&1
+          ')
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "OpenTelemetry initialized" || (echo "OTEL initialization failed!" && exit 1)
+          echo "OTEL module test passed!"
+
+  e2e-docker:
+    name: E2E Test (Docker Compose)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: haproxy-otel:test
+          cache-from: type=gha
+          platforms: linux/amd64
+
+      - name: Run Docker Compose E2E tests
+        run: |
+          chmod +x e2e/run.sh
+          BUILD=0 ./e2e/run.sh
+
+      - name: Cleanup
+        if: always()
+        run: |
+          cd e2e && docker compose down || true
+
+  e2e-kind:
+    name: E2E Test (Kind)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: haproxy-otel:test
+          cache-from: type=gha
+          platforms: linux/amd64
+
+      - name: Install kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+
+      - name: Run E2E tests
+        run: |
+          chmod +x e2e/kind-e2e.sh
+          BUILD=0 ./e2e/kind-e2e.sh
+
   build:
     name: Build and Push
     runs-on: ubuntu-latest
+    needs: [e2e-docker, e2e-kind]
     permissions:
       contents: read
       packages: write
@@ -63,7 +241,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
