@@ -250,6 +250,17 @@ jobs:
           cache-from: type=gha,scope=build-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.suffix }}
 
+      - name: Output build info to summary
+        run: |
+          echo "## Build: ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Platform** | ${{ matrix.platform }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Digest** | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **HAProxy Version** | ${{ env.HAPROXY_VERSION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **OTEL Version** | ${{ steps.otel-version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+
       - name: Export digest
         if: github.event_name != 'pull_request'
         run: |
@@ -321,3 +332,35 @@ jobs:
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+      - name: Output image info to summary
+        run: |
+          PRIMARY_TAG="${{ env.HAPROXY_VERSION }}-${{ steps.otel-version.outputs.version }}-${{ steps.sha.outputs.short }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PRIMARY_TAG}"
+
+          echo "## Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Primary Tag** | \`${PRIMARY_TAG}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **HAProxy Version** | ${{ env.HAPROXY_VERSION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **OTEL Module Version** | ${{ steps.otel-version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Git SHA** | ${{ steps.sha.outputs.short }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Tags" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Architectures" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          docker buildx imagetools inspect "${IMAGE}" --raw | jq -r '.manifests[] | "- \(.platform.os)/\(.platform.architecture): \(.digest | .[0:19])..."' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Pull Command" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${IMAGE}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
