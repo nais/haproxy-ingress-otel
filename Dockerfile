@@ -78,8 +78,8 @@ RUN case "${TARGETPLATFORM}" in \
 RUN mkdir -p /usr/local/lib/lua/5.4 /etc/haproxy/lua
 COPY --from=rust-builder /build/target/release/libhaproxy_otel_module.so /usr/local/lib/lua/5.4/haproxy_otel_module.so
 
-# Copy default OTEL configuration Lua script
-COPY docker/otel.lua /etc/haproxy/lua/otel.lua
+# Copy OTEL Lua configuration script
+COPY otel.lua /etc/haproxy/lua/otel.lua
 
 # Set permissions
 RUN chown -R haproxy:haproxy /usr/local/etc/haproxy /run /var /etc/haproxy/lua && \

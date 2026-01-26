@@ -1,14 +1,14 @@
 [package]
 name = "haproxy-otel"
 version = "0.2.0"
-authors = ["Aleksandr Orlenko <zxteam@pm.me>"]
+authors = ["Aleksandr Orlenko <zxteam@pm.me>", "NAIS <nais@nav.no>"]
 edition = "2021"
-repository = "https://github.com/khvzak/haproxy-otel"
+repository = "https://github.com/nais/haproxy-otel"
 autotests = false
 readme = "README.md"
-keywords = ["haproxy", "opentelemetry"]
+keywords = ["haproxy", "opentelemetry", "kubernetes", "ingress"]
 license = "MIT"
-description = "HAProxy OpenTelemetry tracing support"
+description = "HAProxy Kubernetes Ingress Controller with OpenTelemetry tracing"
 
 [workspace]
 members = ["module", "tests"]
