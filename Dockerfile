@@ -14,8 +14,8 @@ COPY .cargo ./.cargo
 COPY src ./src
 COPY module ./module
 
-# Remove tests from workspace (requires Rust 1.87+ due to edition2024)
-RUN sed -i 's/"tests",//' Cargo.toml
+# Remove tests from workspace members (tests requires edition2024/Rust 1.87+)
+RUN sed -i 's/, "tests"//' Cargo.toml && sed -i 's/"tests", //' Cargo.toml
 
 # Build the module in release mode
 RUN cargo fetch && cargo build --release -p haproxy-otel-module
