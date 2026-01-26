@@ -46,10 +46,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcap2-bin \
     ca-certificates \
     xz-utils \
+    musl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy ingress controller binary and s6-overlay config from official image
 COPY --from=ingress-source /haproxy-ingress-controller /haproxy-ingress-controller
+COPY --from=ingress-source /usr/local/sbin/haproxy_wrapper /usr/local/sbin/haproxy_wrapper
 COPY --from=ingress-source /start.sh /start.sh
 COPY --from=ingress-source /init /init
 COPY --from=ingress-source /etc/s6-overlay /etc/s6-overlay
