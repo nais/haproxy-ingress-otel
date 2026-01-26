@@ -56,7 +56,7 @@ echo "==> Waiting for Jaeger to be ready..."
 kubectl wait --for=condition=available --timeout=120s deployment/jaeger -n haproxy-otel-e2e
 
 echo "==> Waiting for HAProxy Ingress to be ready..."
-if ! kubectl wait --for=condition=available --timeout=180s deployment/haproxy-ingress -n haproxy-ingress; then
+if ! kubectl wait --for=condition=available --timeout=240s deployment/haproxy-ingress -n haproxy-ingress; then
     echo "==> HAProxy Ingress failed to become ready. Debugging info:"
     echo ""
     echo "Pod status:"

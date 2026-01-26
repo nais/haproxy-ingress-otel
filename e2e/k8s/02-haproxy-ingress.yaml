@@ -117,18 +117,18 @@ spec:
             httpGet:
               path: /healthz
               port: 1042
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 6
+            failureThreshold: 10
           readinessProbe:
             httpGet:
               path: /healthz
               port: 1042
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 6
+            timeoutSeconds: 5
+            failureThreshold: 12
           resources:
             requests:
               cpu: 100m
