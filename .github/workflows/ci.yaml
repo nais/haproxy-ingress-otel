@@ -43,7 +43,7 @@ jobs:
           done < versions.env
 
   # ============================================================================
-  # Stage 0.5: Verify all version references are in sync
+  # Stage 1: Version check (parallel with lint)
   # ============================================================================
   check-versions:
     name: Check Version Sync
@@ -60,12 +60,12 @@ jobs:
         run: mise run check-versions
 
   # ============================================================================
-  # Stage 1: Lint (runs first, fast feedback)
+  # Stage 1: Lint (parallel with check-versions, fast feedback)
   # ============================================================================
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    needs: [versions, check-versions]
+    needs: [versions]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
@@ -87,12 +87,12 @@ jobs:
           mise run lint
 
   # ============================================================================
-  # Stage 2: Tests (parallel after lint)
+  # Stage 2: Tests (parallel after lint and check-versions pass)
   # ============================================================================
   unit-test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    needs: [versions, lint]
+    needs: [versions, check-versions, lint]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
@@ -120,7 +120,7 @@ jobs:
   docker-test:
     name: Docker Module Test
     runs-on: ubuntu-latest
-    needs: [versions, lint]
+    needs: [versions, check-versions, lint]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
@@ -172,7 +172,7 @@ jobs:
   e2e:
     name: E2E Test
     runs-on: ubuntu-latest
-    needs: [versions, lint]
+    needs: [versions, check-versions, lint]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
@@ -199,12 +199,12 @@ jobs:
         run: docker compose -f e2e/docker-compose.yaml down -v 2>/dev/null || true
 
   # ============================================================================
-  # Stage 3: Build (parallel with tests, after lint)
+  # Stage 3: Build (parallel with tests, after lint and check-versions)
   # ============================================================================
   build:
     name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
-    needs: [versions, lint]
+    needs: [versions, check-versions, lint]
     permissions:
       contents: read
       packages: write
