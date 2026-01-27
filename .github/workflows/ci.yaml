@@ -23,6 +23,8 @@ jobs:
   versions:
     name: Load Versions
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       haproxy_ingress: ${{ steps.versions.outputs.HAPROXY_INGRESS_VERSION }}
       haproxy: ${{ steps.versions.outputs.HAPROXY_VERSION }}
@@ -49,6 +51,8 @@ jobs:
     name: Check Version Sync
     runs-on: ubuntu-latest
     needs: versions
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
@@ -66,19 +70,21 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     needs: [versions]
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # ratchet:jdx/mise-action@v2
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
+      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # ratchet:Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: ${{ runner.os }}-cargo-lint-
+          prefix-key: v1-rust
+          shared-key: lint
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Lint
         run: |
@@ -93,6 +99,8 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: [versions, check-versions, lint]
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
@@ -105,14 +113,11 @@ jobs:
           sudo add-apt-repository ppa:vbernat/haproxy-${{ needs.versions.outputs.haproxy }} -y
           sudo apt-get install haproxy=${{ needs.versions.outputs.haproxy }}.\*
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
+      - uses: Swatinem/rust-cache@82a92a6e8fbeee089604da2575dc567ae9ddeaab # ratchet:Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: ${{ runner.os }}-cargo-test-
+          prefix-key: v1-rust
+          shared-key: test
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Run tests
         run: mise run test
@@ -121,6 +126,8 @@ jobs:
     name: Docker Module Test
     runs-on: ubuntu-latest
     needs: [versions, check-versions, lint]
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
@@ -173,6 +180,8 @@ jobs:
     name: E2E Test
     runs-on: ubuntu-latest
     needs: [versions, check-versions, lint]
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
