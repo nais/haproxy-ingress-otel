@@ -7,6 +7,16 @@ use opentelemetry_sdk::trace::span_processor_with_async_runtime::BatchSpanProces
 use opentelemetry_sdk::trace::{RandomIdGenerator, Sampler, SdkTracerProvider};
 use opentelemetry_sdk::Resource;
 
+const DEFAULT_ENDPOINT: &str = "http://localhost:4318";
+const TRACES_PATH: &str = "v1/traces";
+
+/// Construct the traces endpoint URL per OTLP spec.
+/// Appends /v1/traces to the base endpoint, ensuring proper path handling.
+fn build_traces_endpoint(base: &str) -> String {
+    let base = base.trim_end_matches('/');
+    format!("{base}/{TRACES_PATH}")
+}
+
 #[derive(Clone)]
 pub(crate) struct Options {
     pub(crate) service_name: String,
@@ -33,9 +43,10 @@ pub fn init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'st
         _ => {}
     }
 
+    let endpoint = build_traces_endpoint(options.endpoint.as_deref().unwrap_or(DEFAULT_ENDPOINT));
     let mut exporter_builder = opentelemetry_otlp::SpanExporter::builder()
         .with_http()
-        .with_endpoint((options.endpoint.as_deref()).unwrap_or("http://localhost:4318/v1/trace"));
+        .with_endpoint(&endpoint);
     match options.protocol.as_deref() {
         None | Some("binary") => {
             exporter_builder =

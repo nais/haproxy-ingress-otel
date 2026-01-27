@@ -3,7 +3,7 @@
 --
 -- Environment variables can be used to configure the module:
 --   OTEL_SERVICE_NAME: Service name for traces (default: "haproxy-ingress")
---   OTEL_EXPORTER_OTLP_ENDPOINT: OTLP collector endpoint (default: "http://localhost:4318/v1/trace")
+--   OTEL_EXPORTER_OTLP_ENDPOINT: OTLP collector endpoint (default: "http://localhost:4318")
 --   OTEL_TRACES_SAMPLER: Sampler strategy (default: "ParentBased")
 --   OTEL_PROPAGATORS: Propagation format (default: "w3c")
 --   OTEL_EXPORTER_OTLP_PROTOCOL: Protocol format (default: "json")
@@ -12,7 +12,7 @@ local opentelemetry = require("haproxy_otel_module")
 
 -- Get configuration from environment variables with defaults
 local service_name = os.getenv("OTEL_SERVICE_NAME") or "haproxy-ingress"
-local endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") or "http://localhost:4318/v1/trace"
+local endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") or "http://localhost:4318"
 local sampler = os.getenv("OTEL_TRACES_SAMPLER") or "ParentBased"
 local propagator = os.getenv("OTEL_PROPAGATORS") or "w3c"
 local protocol = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL") or "json"

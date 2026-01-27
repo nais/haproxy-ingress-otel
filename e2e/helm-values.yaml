@@ -15,7 +15,7 @@ controller:
     - name: OTEL_SERVICE_NAME
       value: "haproxy-ingress"
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      value: "http://jaeger.haproxy-ingress-otel-e2e.svc.cluster.local:4318/v1/traces"
+      value: "http://jaeger.haproxy-ingress-otel-e2e.svc.cluster.local:4318"
     - name: OTEL_TRACES_SAMPLER
       value: "always_on"
     - name: OTEL_PROPAGATORS

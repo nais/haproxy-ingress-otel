@@ -21,7 +21,7 @@ controller:
     - name: OTEL_SERVICE_NAME
       value: "haproxy-ingress"
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      value: "http://otel-collector.observability:4318/v1/traces"
+      value: "http://otel-collector.observability:4318"
 
   config:
     global-config-snippet: |
@@ -58,13 +58,15 @@ docker pull ghcr.io/nais/haproxy-ingress-otel:latest
 
 ### Environment Variables
 
-| Variable                      | Description             | Default                          |
-| ----------------------------- | ----------------------- | -------------------------------- |
-| `OTEL_SERVICE_NAME`           | Service name for traces | `haproxy-ingress`                |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint | `http://localhost:4318/v1/trace` |
-| `OTEL_TRACES_SAMPLER`         | Sampling strategy       | `parentbased_always_on`          |
-| `OTEL_PROPAGATORS`            | Propagation format      | `w3c`                            |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | Protocol format         | `json`                           |
+| Variable                      | Description             | Default                 |
+| ----------------------------- | ----------------------- | ----------------------- |
+| `OTEL_SERVICE_NAME`           | Service name for traces | `haproxy-ingress`       |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint | `http://localhost:4318` |
+| `OTEL_TRACES_SAMPLER`         | Sampling strategy       | `parentbased_always_on` |
+| `OTEL_PROPAGATORS`            | Propagation format      | `w3c`                   |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | Protocol format         | `json`                  |
+
+The `/v1/traces` path is automatically appended to the endpoint per the OTLP specification.
 
 ### Sampler Values
 
@@ -154,7 +156,7 @@ controller:
     - name: OTEL_SERVICE_NAME
       value: "haproxy-ingress"
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      value: "http://otel-collector.observability:4318/v1/traces"
+      value: "http://otel-collector.observability:4318"
     - name: OTEL_TRACES_SAMPLER
       value: "parentbased_always_on"
     - name: OTEL_PROPAGATORS

@@ -73,7 +73,7 @@ async fn mount_http_mock(server: &MockServer) -> MockGuard {
 /// Set up the scoped mock for OTLP traces endpoint
 async fn mount_otlp_mock(server: &MockServer) -> MockGuard {
     Mock::given(method("POST"))
-        .and(path("/v1/trace"))
+        .and(path("/v1/traces"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"accepted": true})))
         .expect(1)
         .mount_as_scoped(&server)
