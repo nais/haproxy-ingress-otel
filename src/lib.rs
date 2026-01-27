@@ -28,7 +28,12 @@ pub fn register(lua: &Lua, options: LuaTable) -> LuaResult<()> {
 
     #[rustfmt::skip]
     core.register_action("start_server_span", &[Action::HttpReq], 0, span::start_server_span)?;
-    core.register_action("end_server_span", &[Action::HttpRes, Action::HttpAfterRes], 0, span::end_server_span)?;
+    core.register_action(
+        "end_server_span",
+        &[Action::HttpRes, Action::HttpAfterRes],
+        0,
+        span::end_server_span,
+    )?;
     core.register_action(
         "set_span_attribute_var",
         &[Action::HttpReq, Action::HttpRes, Action::HttpAfterRes],
