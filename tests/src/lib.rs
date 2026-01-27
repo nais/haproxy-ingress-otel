@@ -8,8 +8,32 @@ use tokio::time::timeout;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockGuard, MockServer, ResponseTemplate};
 
+/// Check if HAProxy has Lua support
+fn haproxy_has_lua_support() -> bool {
+    let output = std::process::Command::new("haproxy")
+        .arg("-vv")
+        .output()
+        .ok();
+
+    match output {
+        Some(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            // Check for +LUA in feature flags (not -LUA which means disabled)
+            stdout.contains("+LUA")
+        }
+        None => false,
+    }
+}
+
 #[tokio::test]
 async fn integration_tests() {
+    // Skip test if HAProxy doesn't have Lua support
+    if !haproxy_has_lua_support() {
+        eprintln!("SKIPPED: HAProxy not found or lacks Lua support.");
+        eprintln!("Run e2e tests with Docker instead: ./e2e/e2e.sh");
+        return;
+    }
+
     // Compile haproxy-otel-module
     tokio::process::Command::new("cargo")
         .args(&["build", "--release", "-p", "haproxy-otel-module"])

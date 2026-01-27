@@ -14,22 +14,62 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  HAPROXY_VERSION: "3.2.4"
   CARGO_TERM_COLOR: always
 
 jobs:
+  # ============================================================================
+  # Stage 0: Load versions from versions.env (single source of truth)
+  # ============================================================================
+  versions:
+    name: Load Versions
+    runs-on: ubuntu-latest
+    outputs:
+      haproxy_ingress: ${{ steps.versions.outputs.HAPROXY_INGRESS_VERSION }}
+      haproxy: ${{ steps.versions.outputs.HAPROXY_VERSION }}
+      s6_overlay: ${{ steps.versions.outputs.S6_OVERLAY_VERSION }}
+      rust: ${{ steps.versions.outputs.RUST_VERSION }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          sparse-checkout: versions.env
+          sparse-checkout-cone-mode: false
+
+      - name: Read versions.env
+        id: versions
+        run: |
+          while IFS='=' read -r key value; do
+            [[ -z "$key" || "$key" =~ ^# ]] && continue
+            echo "${key}=${value}" >> $GITHUB_OUTPUT
+          done < versions.env
+
+  # ============================================================================
+  # Stage 0.5: Verify all version references are in sync
+  # ============================================================================
+  check-versions:
+    name: Check Version Sync
+    runs-on: ubuntu-latest
+    needs: versions
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # ratchet:jdx/mise-action@v2
+        with:
+          install: false
+
+      - name: Verify versions match
+        run: mise run check-versions
+
   # ============================================================================
   # Stage 1: Lint (runs first, fast feedback)
   # ============================================================================
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: [versions, check-versions]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # ratchet:dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # ratchet:jdx/mise-action@v2
 
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         with:
@@ -40,14 +80,11 @@ jobs:
           key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
           restore-keys: ${{ runner.os }}-cargo-lint-
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
+      - name: Lint
         run: |
           sed -i 's/, "tests"//' Cargo.toml
           sed -i 's/"tests", //' Cargo.toml
-          cargo clippy -p haproxy-otel-module --all-targets -- -D warnings
+          mise run lint
 
   # ============================================================================
   # Stage 2: Tests (parallel after lint)
@@ -55,18 +92,18 @@ jobs:
   unit-test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [versions, lint]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # ratchet:dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # ratchet:jdx/mise-action@v2
 
-      - name: Install HAProxy
+      - name: Install HAProxy with Lua
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends software-properties-common
-          sudo add-apt-repository ppa:vbernat/haproxy-3.2 -y
-          sudo apt-get install haproxy=3.2.\*
+          sudo add-apt-repository ppa:vbernat/haproxy-${{ needs.versions.outputs.haproxy }} -y
+          sudo apt-get install haproxy=${{ needs.versions.outputs.haproxy }}.\*
 
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         with:
@@ -78,12 +115,12 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-test-
 
       - name: Run tests
-        run: cargo test -p haproxy-otel-tests
+        run: mise run test
 
   docker-test:
     name: Docker Module Test
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [versions, lint]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
@@ -135,9 +172,13 @@ jobs:
   e2e:
     name: E2E Test
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [versions, lint]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # ratchet:jdx/mise-action@v2
+        with:
+          install: false
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
 
@@ -151,9 +192,7 @@ jobs:
           platforms: linux/amd64
 
       - name: Run E2E tests
-        run: |
-          chmod +x e2e/e2e.sh
-          BUILD=0 PLATFORM=linux/amd64 ./e2e/e2e.sh
+        run: BUILD=0 PLATFORM=linux/amd64 mise run e2e
 
       - name: Cleanup
         if: always()
@@ -165,7 +204,7 @@ jobs:
   build:
     name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
-    needs: lint
+    needs: [versions, lint]
     permissions:
       contents: read
       packages: write
@@ -230,7 +269,7 @@ jobs:
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Digest | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| HAProxy | ${{ env.HAPROXY_VERSION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| HAProxy | ${{ needs.versions.outputs.haproxy_ingress }} |" >> $GITHUB_STEP_SUMMARY
           echo "| OTEL | ${{ steps.versions.outputs.otel }} |" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================================
@@ -239,7 +278,7 @@ jobs:
   push:
     name: Push Multi-arch Image
     runs-on: ubuntu-latest
-    needs: [unit-test, docker-test, e2e, build]
+    needs: [versions, unit-test, docker-test, e2e, build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -267,8 +306,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ env.HAPROXY_VERSION }}-${{ steps.versions.outputs.otel }}-${{ steps.versions.outputs.sha }}
-            type=raw,value=${{ env.HAPROXY_VERSION }}-${{ steps.versions.outputs.otel }}
+            type=raw,value=${{ needs.versions.outputs.haproxy_ingress }}-${{ steps.versions.outputs.otel }}-${{ steps.versions.outputs.sha }}
+            type=raw,value=${{ needs.versions.outputs.haproxy_ingress }}-${{ steps.versions.outputs.otel }}
             type=raw,value=latest
 
       - name: Login to GHCR
@@ -286,7 +325,7 @@ jobs:
 
       - name: Summary
         run: |
-          TAG="${{ env.HAPROXY_VERSION }}-${{ steps.versions.outputs.otel }}-${{ steps.versions.outputs.sha }}"
+          TAG="${{ needs.versions.outputs.haproxy_ingress }}-${{ steps.versions.outputs.otel }}-${{ steps.versions.outputs.sha }}"
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
           echo "## Docker Image Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

@@ -94,7 +94,7 @@ kubectl get pods -n haproxy-ingress
 echo "==> Sending test requests..."
 sleep 3
 for i in {1..5}; do
-    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: echo.local" http://localhost:9080/ || echo "000")
+    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: echo.local" http://localhost:19080/ || echo "000")
     echo "Request $i: HTTP $RESPONSE"
     if [[ "$RESPONSE" != "200" ]]; then
         echo "✗ Request failed with HTTP $RESPONSE"

@@ -6,3 +6,194 @@ kubectl = "latest"
 
 [env]
 RUST_BACKTRACE = "1"
+# Local build directory for HAProxy and dependencies
+LOCAL_BUILD = "{{config_root}}/.local"
+
+[tasks.test]
+description = "Run unit tests (skips integration tests without HAProxy+Lua)"
+run = "cargo test --workspace"
+
+[tasks.lint]
+description = "Run clippy and format check"
+run = """
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+"""
+
+[tasks.e2e]
+description = "Run Docker-based e2e tests"
+run = "./e2e/e2e.sh"
+
+[tasks.e2e-kind]
+description = "Run Kubernetes e2e tests (requires Docker)"
+run = "./e2e/kind-e2e.sh"
+
+[tasks.build]
+description = "Build the project"
+run = "cargo build --release"
+
+[tasks.sync-versions]
+description = "Sync versions from versions.env to manifests and Dockerfile"
+run = """
+#!/bin/bash
+set -euo pipefail
+source versions.env
+
+echo "Syncing versions from versions.env..."
+
+# Cross-platform sed in-place
+sedi() {
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
+# Update Dockerfile ARG defaults
+sedi "s|^ARG RUST_VERSION=.*|ARG RUST_VERSION=$RUST_VERSION|" Dockerfile
+sedi "s|^ARG HAPROXY_INGRESS_VERSION=.*|ARG HAPROXY_INGRESS_VERSION=$HAPROXY_INGRESS_VERSION|" Dockerfile
+sedi "s|^ARG HAPROXY_VERSION=.*|ARG HAPROXY_VERSION=$HAPROXY_VERSION|" Dockerfile
+sedi "s|^ARG S6_OVERLAY_VERSION=.*|ARG S6_OVERLAY_VERSION=$S6_OVERLAY_VERSION|" Dockerfile
+
+# Update e2e K8s manifest
+sedi "s|haproxytech/kubernetes-ingress:[0-9.]*|haproxytech/kubernetes-ingress:$HAPROXY_INGRESS_VERSION|g" e2e/k8s/02-haproxy-ingress.yaml
+
+echo "Done. Verify with: git diff"
+"""
+
+[tasks.check-versions]
+description = "Verify all version references match versions.env"
+run = """
+#!/bin/bash
+set -euo pipefail
+source versions.env
+
+ERRORS=0
+
+check() {
+  local file="$1" pattern="$2" expected="$3" name="$4"
+  if ! grep -q "$pattern$expected" "$file" 2>/dev/null; then
+    echo "❌ $name mismatch in $file (expected $expected)"
+    ERRORS=$((ERRORS + 1))
+  fi
+}
+
+check Dockerfile "^ARG HAPROXY_INGRESS_VERSION=" "$HAPROXY_INGRESS_VERSION" "HAPROXY_INGRESS_VERSION"
+check Dockerfile "^ARG HAPROXY_VERSION=" "$HAPROXY_VERSION" "HAPROXY_VERSION"
+check Dockerfile "^ARG S6_OVERLAY_VERSION=" "$S6_OVERLAY_VERSION" "S6_OVERLAY_VERSION"
+check Dockerfile "^ARG RUST_VERSION=" "$RUST_VERSION" "RUST_VERSION"
+check e2e/k8s/02-haproxy-ingress.yaml "image: haproxytech/kubernetes-ingress:" "$HAPROXY_INGRESS_VERSION" "e2e manifest"
+
+if [[ $ERRORS -gt 0 ]]; then
+  echo ""
+  echo "Run 'mise run sync-versions' to fix"
+  exit 1
+fi
+
+echo "✅ All versions in sync with versions.env"
+"""
+
+[tasks.setup-haproxy]
+description = "Compile HAProxy with Lua support for local testing"
+run = """
+#!/bin/bash
+set -euo pipefail
+
+# Source versions from single source of truth
+source versions.env
+# Use full version from HAPROXY_INGRESS_VERSION for downloads
+HAPROXY_FULL_VERSION="${HAPROXY_INGRESS_VERSION}"
+# Derive short version (e.g., 3.2) for download path
+HAPROXY_SHORT_VERSION="${HAPROXY_FULL_VERSION%.*}"
+
+LUA_VERSION="5.4.8"
+BUILD_DIR="${LOCAL_BUILD:-$PWD/.local}"
+SRC_DIR="$BUILD_DIR/src"
+PREFIX="$BUILD_DIR"
+
+mkdir -p "$SRC_DIR" "$PREFIX/bin" "$PREFIX/lib" "$PREFIX/include"
+
+# macOS: install pcre2 and openssl via brew if missing
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  if ! brew list pcre2 &>/dev/null || ! brew list openssl@3 &>/dev/null; then
+    echo "Installing pcre2 and openssl via brew..."
+    brew install pcre2 openssl@3
+  fi
+  PCRE2_PREFIX=$(brew --prefix pcre2)
+  SSL_PREFIX=$(brew --prefix openssl@3)
+else
+  PCRE2_PREFIX="/usr"
+  SSL_PREFIX="/usr"
+fi
+
+# ===== Build Lua =====
+LUA_PREFIX="$PREFIX"
+if [[ ! -f "$LUA_PREFIX/bin/lua" ]]; then
+  echo "Building Lua $LUA_VERSION..."
+  cd "$SRC_DIR"
+  if [[ ! -f "lua-$LUA_VERSION.tar.gz" ]]; then
+    curl -sSfL "https://www.lua.org/ftp/lua-$LUA_VERSION.tar.gz" -o "lua-$LUA_VERSION.tar.gz"
+  fi
+  rm -rf "lua-$LUA_VERSION"
+  tar xzf "lua-$LUA_VERSION.tar.gz"
+  cd "lua-$LUA_VERSION"
+
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    make -j$(sysctl -n hw.ncpu) macosx INSTALL_TOP="$LUA_PREFIX"
+  else
+    make -j$(nproc) linux INSTALL_TOP="$LUA_PREFIX"
+  fi
+  make install INSTALL_TOP="$LUA_PREFIX"
+  echo "Lua installed: $($LUA_PREFIX/bin/lua -v)"
+else
+  echo "Lua already installed: $($LUA_PREFIX/bin/lua -v)"
+fi
+
+# ===== Build HAProxy =====
+HAPROXY_BIN="$PREFIX/bin/haproxy"
+if [[ -x "$HAPROXY_BIN" ]]; then
+  INSTALLED_VERSION=$("$HAPROXY_BIN" -v 2>&1 | head -1 | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' || echo "unknown")
+  if [[ "$INSTALLED_VERSION" == "$HAPROXY_FULL_VERSION" ]]; then
+    echo "HAProxy $HAPROXY_FULL_VERSION already installed"
+    "$HAPROXY_BIN" -vv | grep "Feature list"
+    exit 0
+  fi
+fi
+
+echo "Building HAProxy $HAPROXY_FULL_VERSION..."
+cd "$SRC_DIR"
+if [[ ! -f "haproxy-$HAPROXY_FULL_VERSION.tar.gz" ]]; then
+  curl -sSfL "https://www.haproxy.org/download/$HAPROXY_SHORT_VERSION/src/haproxy-$HAPROXY_FULL_VERSION.tar.gz" -o "haproxy-$HAPROXY_FULL_VERSION.tar.gz"
+fi
+rm -rf "haproxy-$HAPROXY_FULL_VERSION"
+tar xzf "haproxy-$HAPROXY_FULL_VERSION.tar.gz"
+cd "haproxy-$HAPROXY_FULL_VERSION"
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  make -j$(sysctl -n hw.ncpu) TARGET=osx \\
+    USE_OPENSSL=1 SSL_INC="$SSL_PREFIX/include" SSL_LIB="$SSL_PREFIX/lib" \\
+    USE_PCRE2=1 USE_PCRE2_JIT=1 PCRE2_INC="$PCRE2_PREFIX/include" PCRE2_LIB="$PCRE2_PREFIX/lib" \\
+    USE_LUA=1 LUA_INC="$LUA_PREFIX/include" LUA_LIB="$LUA_PREFIX/lib" \\
+    USE_ZLIB=1
+else
+  make -j$(nproc) TARGET=linux-glibc \\
+    USE_OPENSSL=1 \\
+    USE_PCRE2=1 USE_PCRE2_JIT=1 \\
+    USE_LUA=1 LUA_INC="$LUA_PREFIX/include" LUA_LIB="$LUA_PREFIX/lib" \\
+    USE_ZLIB=1
+fi
+
+cp haproxy "$HAPROXY_BIN"
+echo ""
+echo "HAProxy installed to: $HAPROXY_BIN"
+"$HAPROXY_BIN" -vv | grep -E "(HAProxy version|Feature list)"
+"""
+
+[tasks.test-integration]
+description = "Run integration tests with local HAProxy"
+depends = ["setup-haproxy"]
+run = """
+export PATH="${LOCAL_BUILD:-$PWD/.local}/bin:$PATH"
+cargo test --workspace -- --nocapture
+"""

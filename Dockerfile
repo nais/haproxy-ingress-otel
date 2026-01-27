@@ -1,5 +1,7 @@
 # =============================================================================
-# Version Configuration (update in versions.env for new releases)
+# Version Configuration
+# CI sources these from versions.env. Defaults here for local builds.
+# Run 'mise run sync-versions' when updating versions.env.
 # =============================================================================
 ARG RUST_VERSION=1.87
 ARG HAPROXY_INGRESS_VERSION=3.2.4

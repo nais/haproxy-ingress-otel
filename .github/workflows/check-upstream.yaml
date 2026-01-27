@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  issues: write
+  contents: write
+  pull-requests: write
 
 jobs:
   check-haproxy-ingress:
@@ -60,7 +60,7 @@ jobs:
             echo "::notice::Already up to date: $CURRENT"
           fi
 
-      - name: Check for existing issue
+      - name: Check for existing PR
         id: existing
         if: steps.compare.outputs.update_available == 'true'
         env:
@@ -68,52 +68,71 @@ jobs:
         run: |
           set -euo pipefail
           LATEST="${{ steps.upstream.outputs.version }}"
-          EXISTING=$(gh issue list --label "upstream-update" --state open --json title \
-            | jq -r ".[].title" | grep -c "$LATEST" || true)
-          echo "exists=$EXISTING" >> $GITHUB_OUTPUT
+          BRANCH="deps/haproxy-ingress-$LATEST"
+          # Check if branch or PR already exists
+          if gh pr list --head "$BRANCH" --json number | jq -e '.[0]' > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          elif git ls-remote --heads origin "$BRANCH" | grep -q .; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Ensure label exists
-        if: steps.compare.outputs.update_available == 'true' && steps.existing.outputs.exists == '0'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh label create "upstream-update" --description "Upstream version update available" --color "0E8A16" 2>/dev/null || true
-
-      - name: Create update issue
-        if: steps.compare.outputs.update_available == 'true' && steps.existing.outputs.exists == '0'
+      - name: Create update PR
+        if: steps.compare.outputs.update_available == 'true' && steps.existing.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CURRENT_VERSION: ${{ steps.current.outputs.version }}
           LATEST_VERSION: ${{ steps.upstream.outputs.version }}
         run: |
           set -euo pipefail
-          gh issue create \
-            --title "Update HAProxy Ingress Controller to $LATEST_VERSION" \
-            --label "upstream-update" \
-            --body "## New Upstream Release
+          BRANCH="deps/haproxy-ingress-$LATEST_VERSION"
 
-          A new version of HAProxy Kubernetes Ingress Controller is available.
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          | Current | Latest |
-          |---------|--------|
-          | $CURRENT_VERSION | $LATEST_VERSION |
+          # Create branch and update versions
+          git checkout -b "$BRANCH"
+          sed -i "s/^HAPROXY_INGRESS_VERSION=.*/HAPROXY_INGRESS_VERSION=$LATEST_VERSION/" versions.env
+
+          # Run sync-versions (cross-platform version)
+          source versions.env
+          sed -i "s|^ARG RUST_VERSION=.*|ARG RUST_VERSION=$RUST_VERSION|" Dockerfile
+          sed -i "s|^ARG HAPROXY_INGRESS_VERSION=.*|ARG HAPROXY_INGRESS_VERSION=$HAPROXY_INGRESS_VERSION|" Dockerfile
+          sed -i "s|^ARG HAPROXY_VERSION=.*|ARG HAPROXY_VERSION=$HAPROXY_VERSION|" Dockerfile
+          sed -i "s|^ARG S6_OVERLAY_VERSION=.*|ARG S6_OVERLAY_VERSION=$S6_OVERLAY_VERSION|" Dockerfile
+          sed -i "s|haproxytech/kubernetes-ingress:[0-9.]*|haproxytech/kubernetes-ingress:$HAPROXY_INGRESS_VERSION|g" e2e/k8s/02-haproxy-ingress.yaml
+
+          # Commit and push
+          git add -A
+          git commit -m "deps: update HAProxy Ingress to $LATEST_VERSION"
+          git push -u origin "$BRANCH"
+
+          # Create PR
+          cat > /tmp/pr-body.md << EOF
+          ## Automated Update
+
+          Updates HAProxy Kubernetes Ingress Controller from \`$CURRENT_VERSION\` to \`$LATEST_VERSION\`.
 
           ### Release Notes
           https://github.com/haproxytech/kubernetes-ingress/releases/tag/v$LATEST_VERSION
 
-          ### Update Steps
-          1. Update versions.env with HAPROXY_INGRESS_VERSION=$LATEST_VERSION
-          2. Run e2e tests
-          3. If tests pass, commit and push
+          ### What's Changed
+          - Updated \`versions.env\`
+          - Synced Dockerfile ARGs
+          - Updated e2e manifest
 
-          ### Checklist
-          - [ ] Updated versions.env
-          - [ ] Verified e2e tests pass
-          - [ ] Updated README if needed
-          - [ ] Reviewed upstream changelog for breaking changes
+          ### Testing
+          CI will run e2e tests automatically.
 
           ---
-          *This issue was automatically created by the upstream version check workflow.*"
+          *This PR was automatically created by the upstream version check workflow.*
+          EOF
+
+          gh pr create \
+            --title "deps: update HAProxy Ingress to $LATEST_VERSION" \
+            --body-file /tmp/pr-body.md
 
   check-s6-overlay:
     name: Check s6-overlay

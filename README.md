@@ -15,7 +15,7 @@ Use this image with the official [haproxytech/kubernetes-ingress](https://github
 controller:
   image:
     repository: ghcr.io/nais/haproxy-ingress-otel
-    tag: "3.2.4-0.2.0"
+    tag: "latest"  # or pin to specific version like "3.2.4-0.2.0"
 
   extraEnvs:
     - name: OTEL_SERVICE_NAME
@@ -48,11 +48,11 @@ docker pull ghcr.io/nais/haproxy-ingress-otel:latest
 
 ### Tags
 
-| Tag                 | Description                               |
-| ------------------- | ----------------------------------------- |
-| `latest`            | Latest build from main branch             |
-| `3.2.4-0.2.0`       | HAProxy Ingress 3.2.4 + OTEL module 0.2.0 |
-| `3.2.4-0.2.0-<sha>` | Specific commit build                     |
+| Tag Pattern              | Example               | Description                            |
+| ------------------------ | --------------------- | -------------------------------------- |
+| `latest`                 | `latest`              | Latest build from main branch          |
+| `<haproxy>-<otel>`       | `3.2.4-0.2.0`         | HAProxy Ingress version + OTEL version |
+| `<haproxy>-<otel>-<sha>` | `3.2.4-0.2.0-abc1234` | Specific commit build                  |
 
 ## Configuration
 
@@ -122,7 +122,7 @@ http-request lua.set_span_attribute_var user.id txn.user_id
 controller:
   image:
     repository: ghcr.io/nais/haproxy-ingress-otel
-    tag: "3.2.4-0.2.0"
+    tag: "latest"  # or pin to specific version
 
   # OTEL configuration via environment
   extraEnvs:
@@ -189,16 +189,14 @@ See [e2e/README.md](e2e/README.md) for detailed testing instructions.
 
 ## Version Policy
 
-This image tracks the latest stable branch of HAProxy Kubernetes Ingress Controller (currently 3.2.x).
+This image tracks the latest stable branch of HAProxy Kubernetes Ingress Controller.
 
-| Component       | Current | Source                                                                              |
-| --------------- | ------- | ----------------------------------------------------------------------------------- |
-| HAProxy Ingress | 3.2.4   | [haproxytech/kubernetes-ingress](https://github.com/haproxytech/kubernetes-ingress) |
-| HAProxy         | 3.2     | Debian package in ingress image                                                     |
-| s6-overlay      | 3.1.6.2 | [just-containers/s6-overlay](https://github.com/just-containers/s6-overlay)         |
-| Rust            | 1.87    | OTEL module build                                                                   |
+All versions are defined in [`versions.env`](versions.env). A GitHub workflow checks weekly for upstream updates and creates PRs automatically.
 
-Versions are tracked in [`versions.env`](versions.env). A GitHub workflow checks weekly for upstream updates.
+| Component       | Source                                                                              |
+| --------------- | ----------------------------------------------------------------------------------- |
+| HAProxy Ingress | [haproxytech/kubernetes-ingress](https://github.com/haproxytech/kubernetes-ingress) |
+| s6-overlay      | [just-containers/s6-overlay](https://github.com/just-containers/s6-overlay)         |
 
 ## Upstream
 
