@@ -3,12 +3,11 @@
 # E2E test for HAProxy OTEL using Docker Compose
 #
 # Usage:
-#   ./e2e/e2e.sh          # Run e2e tests (builds image if needed)
+#   ./e2e/e2e.sh          # Run e2e tests (always builds, Docker caching makes it fast)
 #   BUILD=0 ./e2e/e2e.sh  # Skip build, use existing image
-#   BUILD=1 ./e2e/e2e.sh  # Force rebuild
 #
 # Environment variables:
-#   BUILD      - Set to 0 to skip build, 1 to force rebuild
+#   BUILD      - Set to 0 to skip build (default: 1, always build)
 #   PLATFORM   - Override platform (linux/amd64 or linux/arm64)
 #
 set -euo pipefail
@@ -48,14 +47,12 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-# Build the image if it doesn't exist or if BUILD=1
-if [[ "${BUILD:-}" == "0" ]]; then
+# Build the image (Docker layer caching makes this fast when unchanged)
+if [[ "${BUILD:-1}" == "0" ]]; then
     echo "==> Skipping build (BUILD=0)"
-elif [[ "${BUILD:-}" == "1" ]] || ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
+else
     echo "==> Building haproxy-ingress-otel image for $PLATFORM..."
     docker build --platform "$PLATFORM" -t "$IMAGE_NAME" "$REPO_ROOT"
-else
-    echo "==> Using existing haproxy-ingress-otel image (set BUILD=1 to rebuild)"
 fi
 
 echo "==> Starting services..."

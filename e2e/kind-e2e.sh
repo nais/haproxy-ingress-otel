@@ -3,12 +3,11 @@
 # E2E test for HAProxy OTEL using Kind (Kubernetes in Docker)
 #
 # Usage:
-#   ./e2e/kind-e2e.sh          # Run e2e tests (builds image if needed)
+#   ./e2e/kind-e2e.sh          # Run e2e tests (always builds, Docker caching makes it fast)
 #   BUILD=0 ./e2e/kind-e2e.sh  # Skip build, use existing image
-#   BUILD=1 ./e2e/kind-e2e.sh  # Force rebuild
 #
 # Environment variables:
-#   BUILD      - Set to 0 to skip build, 1 to force rebuild
+#   BUILD      - Set to 0 to skip build (default: 1, always build)
 #   PLATFORM   - Override platform (linux/amd64 or linux/arm64)
 #
 set -euo pipefail
@@ -49,14 +48,12 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-# Build the image if it doesn't exist or if BUILD=1
-if [[ "${BUILD:-}" == "0" ]]; then
+# Build the image (Docker layer caching makes this fast when unchanged)
+if [[ "${BUILD:-1}" == "0" ]]; then
     echo "==> Skipping build (BUILD=0)"
-elif [[ "${BUILD:-}" == "1" ]] || ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
+else
     echo "==> Building haproxy-ingress-otel image for $PLATFORM..."
     docker build --platform "$PLATFORM" -t "$IMAGE_NAME" "$REPO_ROOT"
-else
-    echo "==> Using existing haproxy-ingress-otel image (set BUILD=1 to rebuild)"
 fi
 
 echo "==> Creating kind cluster..."
@@ -91,8 +88,24 @@ kubectl wait --for=condition=available --timeout=60s deployment/echo-server -n h
 echo "==> HAProxy Ingress status:"
 kubectl get pods -n haproxy-ingress
 
+echo "==> Waiting for ingress to be fully configured..."
+# Wait for the echo-server endpoints to be registered in HAProxy
+for i in {1..30}; do
+    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: echo.local" http://localhost:19080/ 2>/dev/null || echo "000")
+    if [[ "$RESPONSE" == "200" ]]; then
+        echo "✓ Ingress is ready"
+        break
+    fi
+    if [[ $i -eq 30 ]]; then
+        echo "✗ Ingress failed to become ready"
+        kubectl logs -n haproxy-ingress -l app.kubernetes.io/name=kubernetes-ingress --tail=50
+        exit 1
+    fi
+    echo "    Attempt $i: HTTP $RESPONSE, waiting..."
+    sleep 2
+done
+
 echo "==> Sending test requests..."
-sleep 3
 for i in {1..5}; do
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: echo.local" http://localhost:19080/ || echo "000")
     echo "Request $i: HTTP $RESPONSE"
