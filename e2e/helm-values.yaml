@@ -28,6 +28,10 @@ controller:
       tune.lua.bool-sample-conversion pre-3.1-bug
       insecure-fork-wanted
       lua-load-per-thread /etc/haproxy/lua/otel.lua
+    defaults-config-snippet: |
+      log-format "%ci:%cp [%tr] %ft %b/%s %ST %B %{+Q}r trace_id=%[var(txn.otel_trace_id)] span_id=%[var(txn.otel_span_id)]"
     frontend-config-snippet: |
       http-request lua.start_server_span
       filter lua.opentelemetry-trace
+      http-response set-header X-Trace-Id %[var(txn.otel_trace_id)]
+      http-response set-header X-Span-Id %[var(txn.otel_span_id)]

@@ -78,7 +78,7 @@ done
 
 echo "==> Sending test requests..."
 for i in {1..5}; do
-    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ || echo "000")
+    RESPONSE=$(curl -s -D /tmp/headers -o /dev/null -w "%{http_code}" http://localhost:8080/ || echo "000")
     echo "Request $i: HTTP $RESPONSE"
     if [[ "$RESPONSE" != "200" ]]; then
         echo "✗ Request failed with HTTP $RESPONSE"
@@ -86,6 +86,40 @@ for i in {1..5}; do
         exit 1
     fi
 done
+
+echo "==> Verifying trace context headers..."
+TRACE_ID=$(grep -i "x-trace-id:" /tmp/headers | tail -1 | awk '{print $2}' | tr -d '\r')
+SPAN_ID=$(grep -i "x-span-id:" /tmp/headers | tail -1 | awk '{print $2}' | tr -d '\r')
+
+if [[ -z "$TRACE_ID" || "$TRACE_ID" == "-" ]]; then
+    echo "✗ X-Trace-Id header missing or empty"
+    echo "Headers received:"
+    cat /tmp/headers
+    docker compose -f "$SCRIPT_DIR/docker-compose.yaml" logs haproxy
+    exit 1
+fi
+
+if [[ -z "$SPAN_ID" || "$SPAN_ID" == "-" ]]; then
+    echo "✗ X-Span-Id header missing or empty"
+    echo "Headers received:"
+    cat /tmp/headers
+    docker compose -f "$SCRIPT_DIR/docker-compose.yaml" logs haproxy
+    exit 1
+fi
+
+# Validate format (hex strings)
+if [[ ! "$TRACE_ID" =~ ^[0-9a-f]{32}$ ]]; then
+    echo "✗ X-Trace-Id invalid format: '$TRACE_ID' (expected 32 hex chars)"
+    exit 1
+fi
+
+if [[ ! "$SPAN_ID" =~ ^[0-9a-f]{16}$ ]]; then
+    echo "✗ X-Span-Id invalid format: '$SPAN_ID' (expected 16 hex chars)"
+    exit 1
+fi
+
+echo "✓ Trace ID: $TRACE_ID"
+echo "✓ Span ID:  $SPAN_ID"
 
 echo "==> Verifying traces in Jaeger..."
 echo "    Waiting for batch exporter to flush..."

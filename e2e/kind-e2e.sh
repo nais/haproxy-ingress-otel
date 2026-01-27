@@ -105,15 +105,43 @@ for i in {1..30}; do
     sleep 2
 done
 
-echo "==> Sending test requests..."
+echo "==> Sending test requests and verifying trace headers..."
 for i in {1..5}; do
-    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: echo.local" http://localhost:19080/ || echo "000")
+    # Capture response headers
+    RESPONSE=$(curl -s -D /tmp/headers -o /dev/null -w "%{http_code}" -H "Host: echo.local" http://localhost:19080/ || echo "000")
     echo "Request $i: HTTP $RESPONSE"
     if [[ "$RESPONSE" != "200" ]]; then
         echo "✗ Request failed with HTTP $RESPONSE"
         kubectl logs -n haproxy-ingress -l app.kubernetes.io/name=kubernetes-ingress --tail=50
         exit 1
     fi
+
+    # Verify trace headers
+    TRACE_ID=$(grep -i "^X-Trace-Id:" /tmp/headers | awk '{print $2}' | tr -d '\r\n')
+    SPAN_ID=$(grep -i "^X-Span-Id:" /tmp/headers | awk '{print $2}' | tr -d '\r\n')
+
+    if [[ -z "$TRACE_ID" ]]; then
+        echo "✗ X-Trace-Id header missing"
+        cat /tmp/headers
+        exit 1
+    fi
+    if [[ -z "$SPAN_ID" ]]; then
+        echo "✗ X-Span-Id header missing"
+        cat /tmp/headers
+        exit 1
+    fi
+
+    # Validate format (trace_id should be 32 hex chars, span_id 16 hex chars)
+    if [[ ! "$TRACE_ID" =~ ^[0-9a-f]{32}$ ]]; then
+        echo "✗ Invalid trace_id format: $TRACE_ID (expected 32 hex chars)"
+        exit 1
+    fi
+    if [[ ! "$SPAN_ID" =~ ^[0-9a-f]{16}$ ]]; then
+        echo "✗ Invalid span_id format: $SPAN_ID (expected 16 hex chars)"
+        exit 1
+    fi
+
+    echo "    trace_id=$TRACE_ID span_id=$SPAN_ID"
 done
 
 echo "==> Verifying traces in Jaeger..."
