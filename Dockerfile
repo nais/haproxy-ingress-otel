@@ -1,5 +1,15 @@
-# Build stage for the Rust OTEL module (glibc - cdylib doesn't support musl)
-FROM rust:1.87-bookworm AS rust-builder
+# =============================================================================
+# Version Configuration (update in versions.env for new releases)
+# =============================================================================
+ARG RUST_VERSION=1.87
+ARG HAPROXY_INGRESS_VERSION=3.2.4
+ARG HAPROXY_VERSION=3.2
+ARG S6_OVERLAY_VERSION=3.1.6.2
+
+# =============================================================================
+# Build stage: Rust OTEL module (glibc - cdylib doesn't support musl)
+# =============================================================================
+FROM rust:${RUST_VERSION}-bookworm AS rust-builder
 
 WORKDIR /build
 
@@ -20,14 +30,24 @@ RUN sed -i 's/, "tests"//' Cargo.toml && sed -i 's/"tests", //' Cargo.toml
 # Build the module in release mode
 RUN cargo fetch && cargo build --release -p haproxy-otel-module
 
-# Extract the ingress controller binary and config from the official Alpine image
-FROM docker.io/haproxytech/kubernetes-ingress:3.2.4 AS ingress-source
+# =============================================================================
+# Source stage: Extract binaries from official HAProxy Ingress Controller
+# =============================================================================
+ARG HAPROXY_INGRESS_VERSION
+FROM docker.io/haproxytech/kubernetes-ingress:${HAPROXY_INGRESS_VERSION} AS ingress-source
 
-# Final image based on HAProxy Debian with glibc
-FROM haproxytech/haproxy-debian:3.2
+# =============================================================================
+# Final stage: Debian-based HAProxy with OTEL module
+# =============================================================================
+ARG HAPROXY_VERSION
+ARG HAPROXY_INGRESS_VERSION
+ARG S6_OVERLAY_VERSION
+FROM haproxytech/haproxy-debian:${HAPROXY_VERSION}
 
 ARG TARGETPLATFORM
-ARG S6_OVERLAY_VERSION=3.1.6.2
+ARG S6_OVERLAY_VERSION
+ARG HAPROXY_VERSION
+ARG HAPROXY_INGRESS_VERSION
 
 ENV S6_OVERLAY_VERSION=$S6_OVERLAY_VERSION
 ENV S6_READ_ONLY_ROOT=1
@@ -102,6 +122,9 @@ LABEL org.opencontainers.image.title="HAProxy Kubernetes Ingress with OpenTeleme
       org.opencontainers.image.description="HAProxy Tech Kubernetes Ingress Controller with pre-compiled OpenTelemetry tracing module" \
       org.opencontainers.image.source="https://github.com/nais/haproxy-ingress-otel" \
       org.opencontainers.image.vendor="NAIS" \
-      org.opencontainers.image.base.name="haproxytech/haproxy-debian:3.2"
+      org.opencontainers.image.base.name="haproxytech/haproxy-debian:${HAPROXY_VERSION}" \
+      org.opencontainers.image.version="${HAPROXY_INGRESS_VERSION}" \
+      io.nais.haproxy-ingress.version="${HAPROXY_INGRESS_VERSION}" \
+      io.nais.haproxy.version="${HAPROXY_VERSION}"
 
 ENTRYPOINT ["/start.sh"]

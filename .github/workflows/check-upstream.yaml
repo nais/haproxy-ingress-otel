@@ -1,0 +1,179 @@
+name: Check Upstream Versions
+
+on:
+  schedule:
+    # Run every Monday at 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-haproxy-ingress:
+    name: Check HAProxy Ingress Controller
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Get current version
+        id: current
+        run: |
+          set -euo pipefail
+          CURRENT=$(grep 'HAPROXY_INGRESS_VERSION=' versions.env | cut -d= -f2)
+          if [ -z "$CURRENT" ]; then
+            echo "::error::Failed to read HAPROXY_INGRESS_VERSION from versions.env"
+            exit 1
+          fi
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT"
+
+      - name: Get latest upstream version
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Get latest 3.2.x release (we track only latest major branch)
+          LATEST=$(gh api repos/haproxytech/kubernetes-ingress/releases --jq \
+            '[.[] | select(.tag_name | startswith("v3.2")) | select(.prerelease == false)][0].tag_name' \
+            | sed 's/^v//')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "::error::Failed to fetch latest upstream version"
+            exit 1
+          fi
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest upstream version: $LATEST"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          set -euo pipefail
+          CURRENT="${{ steps.current.outputs.version }}"
+          LATEST="${{ steps.upstream.outputs.version }}"
+          if [ "$CURRENT" != "$LATEST" ]; then
+            echo "update_available=true" >> $GITHUB_OUTPUT
+            echo "::notice::New version available: $LATEST (current: $CURRENT)"
+          else
+            echo "update_available=false" >> $GITHUB_OUTPUT
+            echo "::notice::Already up to date: $CURRENT"
+          fi
+
+      - name: Check for existing issue
+        id: existing
+        if: steps.compare.outputs.update_available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LATEST="${{ steps.upstream.outputs.version }}"
+          EXISTING=$(gh issue list --label "upstream-update" --state open --json title \
+            | jq -r ".[].title" | grep -c "$LATEST" || true)
+          echo "exists=$EXISTING" >> $GITHUB_OUTPUT
+
+      - name: Ensure label exists
+        if: steps.compare.outputs.update_available == 'true' && steps.existing.outputs.exists == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "upstream-update" --description "Upstream version update available" --color "0E8A16" 2>/dev/null || true
+
+      - name: Create update issue
+        if: steps.compare.outputs.update_available == 'true' && steps.existing.outputs.exists == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT_VERSION: ${{ steps.current.outputs.version }}
+          LATEST_VERSION: ${{ steps.upstream.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh issue create \
+            --title "Update HAProxy Ingress Controller to $LATEST_VERSION" \
+            --label "upstream-update" \
+            --body "## New Upstream Release
+
+          A new version of HAProxy Kubernetes Ingress Controller is available.
+
+          | Current | Latest |
+          |---------|--------|
+          | $CURRENT_VERSION | $LATEST_VERSION |
+
+          ### Release Notes
+          https://github.com/haproxytech/kubernetes-ingress/releases/tag/v$LATEST_VERSION
+
+          ### Update Steps
+          1. Update versions.env with HAPROXY_INGRESS_VERSION=$LATEST_VERSION
+          2. Run e2e tests
+          3. If tests pass, commit and push
+
+          ### Checklist
+          - [ ] Updated versions.env
+          - [ ] Verified e2e tests pass
+          - [ ] Updated README if needed
+          - [ ] Reviewed upstream changelog for breaking changes
+
+          ---
+          *This issue was automatically created by the upstream version check workflow.*"
+
+  check-s6-overlay:
+    name: Check s6-overlay
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Get current version
+        id: current
+        run: |
+          set -euo pipefail
+          CURRENT=$(grep 'S6_OVERLAY_VERSION=' versions.env | cut -d= -f2)
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+
+      - name: Get latest upstream version
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LATEST=$(gh api repos/just-containers/s6-overlay/releases/latest --jq '.tag_name' | sed 's/^v//')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+
+      - name: Compare versions
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          LATEST="${{ steps.upstream.outputs.version }}"
+          if [ "$CURRENT" != "$LATEST" ]; then
+            echo "::notice::s6-overlay update available: $LATEST (current: $CURRENT)"
+          else
+            echo "::notice::s6-overlay up to date: $CURRENT"
+          fi
+
+  check-rust:
+    name: Check Rust Toolchain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+
+      - name: Get current version
+        id: current
+        run: |
+          set -euo pipefail
+          CURRENT=$(grep 'RUST_VERSION=' versions.env | cut -d= -f2)
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+
+      - name: Get latest stable Rust
+        id: upstream
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -sfL https://static.rust-lang.org/dist/channel-rust-stable.toml \
+            | grep -A1 '\[pkg.rust\]' | grep 'version = ' | cut -d'"' -f2 | cut -d' ' -f1)
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+
+      - name: Compare versions
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          LATEST="${{ steps.upstream.outputs.version }}"
+          if [ "$CURRENT" != "$LATEST" ]; then
+            echo "::notice::Rust update available: $LATEST (current: $CURRENT)"
+          else
+            echo "::notice::Rust up to date: $CURRENT"
+          fi

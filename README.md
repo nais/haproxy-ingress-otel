@@ -187,6 +187,19 @@ docker build -t haproxy-ingress-otel:test .
 
 See [e2e/README.md](e2e/README.md) for detailed testing instructions.
 
+## Version Policy
+
+This image tracks the latest stable branch of HAProxy Kubernetes Ingress Controller (currently 3.2.x).
+
+| Component       | Current | Source                                                                              |
+| --------------- | ------- | ----------------------------------------------------------------------------------- |
+| HAProxy Ingress | 3.2.4   | [haproxytech/kubernetes-ingress](https://github.com/haproxytech/kubernetes-ingress) |
+| HAProxy         | 3.2     | Debian package in ingress image                                                     |
+| s6-overlay      | 3.1.6.2 | [just-containers/s6-overlay](https://github.com/just-containers/s6-overlay)         |
+| Rust            | 1.87    | OTEL module build                                                                   |
+
+Versions are tracked in [`versions.env`](versions.env). A GitHub workflow checks weekly for upstream updates.
+
 ## Upstream
 
 This project builds on:
