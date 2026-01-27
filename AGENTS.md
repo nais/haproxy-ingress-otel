@@ -9,6 +9,7 @@ mise run lint              # Format check + clippy
 mise run test              # Unit tests
 mise run test-integration  # Full tests (requires HAProxy+Lua)
 mise run e2e               # Docker Compose e2e tests
+mise run e2e-kind          # Kind-based e2e tests
 mise run build             # Release build
 mise run check-versions    # Verify version consistency
 mise run sync-versions     # Propagate versions.env changes
