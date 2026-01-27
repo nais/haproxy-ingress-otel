@@ -54,18 +54,21 @@ spec:
   controller: haproxy.org/ingress-controller
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: haproxy-default-cert
+  namespace: haproxy-ingress
+type: kubernetes.io/tls
+data:
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURDVENDQWZHZ0F3SUJBZ0lVRVB0b1FqNFY2SGJTV0hadVE5S3F0NUczT2xzd0RRWUpLb1pJaHZjTkFRRUwKQlFBd0ZERVNNQkFHQTFVRUF3d0piRzlqWVd4b2IzTjBNQjRYRFRJMk1ERXlOakl4TXpFMU5Wb1hEVEkzTURFeQpOakl4TXpFMU5Wb3dGREVTTUJBR0ExVUVBd3dKYkc5allXeG9iM04wTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGCkFBT0NBUThBTUlJQkNnS0NBUUVBMGd5aVlHb05WNGpoWGx0bjdRQXhXYkZ0WWJqUU04cmVEODNNZjJrVlpCdGMKMk9FOGlXT1NGMlFzdGpGNWNzOFp6NEpyNk1qWlZDM3FOMkZUclFWWjFUeU1jeWZST2pkdzNXbElDZDd6SmdZZApndXVvWHNSNTM3cDZTRkZyUmhCalNLQkRUMGxsdEhySncvdk9salpLU2tHQWV1UmNlTlpjZVdnWmQ5d0R5L25oClBkNWN3OEowbDhBTWNSUGVyZUpUeEFVVmhTVzdtZmdkNVBVY1ZicEtsa21Tc2trbEJaNjVyZWZkWG1nTC9lM1YKd2dkTkhtTWdRMlo3MlFXdXFQYjdROVVIL2tWWUJRK0VNTTdsQW4xUndEbjQ4aXc2YzlCNEp3dEdlZjk1TXFCNwp1bXlpbWRkV0ZRODRaMEZEcFJReXJqekdDUUlDY2svUERYWWpnRVRuaXdJREFRQUJvMU13VVRBZEJnTlZIUTRFCkZnUVVDSmZOS0g5djYwckNWMms0L0ZrVVBvR0FCSmt3SHdZRFZSMGpCQmd3Rm9BVUNKZk5LSDl2NjByQ1YyazQKL0ZrVVBvR0FCSmt3RHdZRFZSMFRBUUgvQkFVd0F3RUIvekFOQmdrcWhraUc5dzBCQVFzRkFBT0NBUUVBYWhVWQozSUhHMHhIWFpEQVhUby9UY2h0VUcvaTdyMGdma2lPbG5UeHVYa3NIc01PUWhXcXNoV3BmT1ZPaVlxV0pSSHJ3CkVUZFhSTm40OUlXOGV1MUlmdTNUS3k5RTBiY3QxbHpGZHpWcGdGaXBjQ3Byd3pvcEZiTEFkc3BTcWQxVm1Vd1MKczM0bDZqNXlYd1J2andreWdGam5PZEd5NUdESlFrOG9La2VZVjNobjI2OWpEWGw5M0o4K2REU2VYcEZPVi94cwpoK3Z2VjI3aHZWUE9OVXVjeUNYSDIvN2FuVCtmZExhQmpMK0dLKzhMWjd0dzlRSVBKY2oxTzd5V3h6UnhHVndrCjFMbHQ0ZlZ4Q2gxZ0ovNjFUTysvUzY5aEpYUVhNeVp1dm4yYVltSWZBMUFtZlpCN1FlU1d4QVNaT0k2Z3owemwKTVl4UXJ6bHp1dEp4NHRhRGNBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRRFNES0pnYWcxWGlPRmUKVzJmdEFERlpzVzFodU5Benl0NFB6Y3gvYVJWa0cxelk0VHlKWTVJWFpDeTJNWGx5enhuUGdtdm95TmxVTGVvMwpZVk90QlZuVlBJeHpKOUU2TjNEZGFVZ0ozdk1tQmgyQzY2aGV4SG5mdW5wSVVXdEdFR05Jb0VOUFNXVzBlc25ECis4NldOa3BLUVlCNjVGeDQxbHg1YUJsMzNBUEwrZUU5M2x6RHduU1h3QXh4RTk2dDRsUEVCUldGSmJ1WitCM2sKOVJ4VnVrcVdTWkt5U1NVRm5ybXQ1OTFlYUF2OTdkWENCMDBlWXlCRFpudlpCYTZvOXZ0RDFRZitSVmdGRDRRdwp6dVVDZlZIQU9manlMRHB6MEhnbkMwWjUvM2t5b0h1NmJLS1oxMVlWRHpoblFVT2xGREt1UE1ZSkFnSnlUODhOCmRpT0FST2VMQWdNQkFBRUNnZ0VBRE5QR3NTZG8wbDkxd2tMSDhWbzdEN0ZkSWhEUDFJbmZOVm5kQml1bzNQV1IKTjhTWDR6WmxQQ05CV2lZdTZlU1FQTCt1YUlkemRpMzIxZUQwc0prL3A4TmwxRlozSmsrVm9SbHNvSmpqNk11SwphS0R6SmVHYnZ1dFZaWlRMU25xcFVreXZMNXZBRGhCOWpqcjVCSVZXT3VKQmk3K3l3ZmpEcWlQMUc4MVRPRzZNClJjZE9YeTEyRTA0Q0RrdDJZZUVZMTNFbDVxaEZPYTR4QlFsMUZCTVJEVWViTjVLY0ZTSjBxUXJYZnNIcGl6eVcKTnl1Q3p1SGFRREpTRUxCQlNXZldRaElRV05Tb2UxOWpFOU9sQkx0QVU5KzNJaE1uQ0V2cFlFUnl4NWpqNjVnQwoyMnJqK3hvZkh4Ti9vRnVxNUVCOURMRXYyT1pvNFhYQ0RqRlhIUW9oZ1FLQmdRRDdmYkxhMFJ1eXkzRytRdk4vCmI3MHNZRFcwaWlkSjViZUcyMFdoUHZKdXp1L1U0NU9zeXVOTHFjb1ZXU1ZUUGcxTGFkWkxyejlpWEQ2dXJvSnUKQ0Y4RHI0aWhsVk5KWjFDQUFnYkJlN0VockwxRmZwNXVWUElxamwzVmRpTTcxVmxTeU9ETm1pVUJLNzl0WkQzTwpQVzJMTEhSMmhnVGVNejVTbURJYy9ZMWFRUUtCZ1FEVjBMbTBYMU5VcWRsZUQvM1FOVmFucC9JeEw0TElOcGxHCjl3QzR0NUR4YWtDZlptRnFsVGlCd3h2WFBvVitsVXMwYmdJVkdPeUlHdnRLYnlidFhlaWw5QXZFMUNtODEzTm8KSHRqRVNOTHpsVDVQS3YvZ3piMHRiNnlydnFJVFM3UnZKa1QxaUNQS2ZkekFpeU11bHBPdEJaL1pydE9oTU5jTgpwZ2hrQUx6V3l3S0JnRmhCa1gyMitvaHhXdlpSR3BDelR1ait6bm9RTForQ1RUaTNSS1ZFcU9GNEg3UlBOU2pqCmZvYTBEQ1lYeGNDRHV6aW02THhnd05hczFwYUl5VjhCOHc0aEVNcmIwNEdrRHgwTkdQL1hmNTc0dHVkbmV3UHYKTFpqL296QmhLQlk4VmY5MlhXWHAzV2lleUt3RURLaU82QjE2T1ZqS3lYU00rU2NWSUNrS1ZndkJBb0dCQUsrWgovT3BtWDhub3ROekx4V2g2WmZETHZkMG5hQUdHMWR1eWdLVTBIWlluN1dyOGFvVmVpRW9LTTVOVGhjK3dUVk9DCkJiUE9CSFREdEI0dHE0ckcxWXQySXpSRUN3Tk03enRVR2pNYW5DWHhMSHRZbFUzTHF0TG1KS25vcHJPeU9UNFAKOEJLMi9LNFJNSHZ4eWJNNWQ0OWlUeVk0cnhaelJpdXZjTFN3NW1hQkFvR0JBUEV6TkFRV0w1K3BrSExyQ1owcQpMUGNCYmFBTXVTY1FGSWxGTm8xVnM1MjVUVUo3NEhaaU9scUIybWRPY0lnbVBXUWx6UkhKUlJyYmVqZGd4QjNKCnBPaXpuT2RDSTdWeXZvVjFnc3dPeTFVZDlMVlA2MzhNenZBMHQycFdpeUgvaEJxVEtTU1lDY1RpWHlGVGhCbGMKRzBsME0zR3FZaXlHM2l0YWxqcFFyVUNqCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: haproxy-config
   namespace: haproxy-ingress
-data:
-  global-config-snippet: |
-    tune.lua.bool-sample-conversion pre-3.1-bug
-    insecure-fork-wanted
-    lua-load-per-thread /etc/haproxy/lua/otel.lua
-  frontend-config-snippet: |
-    http-request lua.start_server_span
-    filter lua.opentelemetry-trace
+data: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -83,12 +86,31 @@ spec:
         app: haproxy-ingress
     spec:
       serviceAccountName: haproxy-ingress
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
       containers:
         - name: haproxy-ingress
-          image: haproxy-otel:test
+          image: haproxytech/kubernetes-ingress:3.2.4
           args:
+            - --default-ssl-certificate=haproxy-ingress/haproxy-default-cert
             - --configmap=haproxy-ingress/haproxy-config
+            - --http-bind-port=8080
+            - --https-bind-port=8443
             - --ingress.class=haproxy
+            - --publish-service=haproxy-ingress/haproxy-ingress
+            - --log=info
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
           ports:
             - name: http
               containerPort: 8080
@@ -105,6 +127,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
             - name: OTEL_SERVICE_NAME
               value: haproxy-ingress-e2e
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -117,7 +143,7 @@ spec:
             httpGet:
               path: /healthz
               port: 1042
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 60
@@ -135,13 +161,19 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+          resources: {}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+              subPath: tmp
+            - name: tmp
+              mountPath: /run
+              subPath: run
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service

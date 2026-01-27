@@ -1,68 +1,92 @@
 # E2E Tests
 
-End-to-end tests using Kind (Kubernetes in Docker) to test the HAProxy Kubernetes Ingress Controller with OpenTelemetry tracing.
+End-to-end tests for the HAProxy OTEL module.
 
-## Running Tests
+## Test Types
+
+| Script        | Dependencies   | Use Case                |
+| ------------- | -------------- | ----------------------- |
+| `e2e.sh`      | Docker Compose | CI, fast feedback       |
+| `kind-e2e.sh` | Kind, Helm     | Full Kubernetes testing |
+
+## Docker Compose Test (CI)
+
+Runs HAProxy directly with Docker Compose - fastest option, used in CI:
 
 ```bash
-# Run e2e tests (builds image if needed)
-./e2e/e2e.sh
+./e2e/e2e.sh          # Build and test
+BUILD=0 ./e2e/e2e.sh  # Skip build, use existing image
+```
 
-# Skip build, use existing image
-BUILD=0 ./e2e/e2e.sh
+## Kind/Helm Test (Kubernetes)
 
-# Force rebuild
-BUILD=1 ./e2e/e2e.sh
+Tests the full HAProxy Kubernetes Ingress Controller deployment with the official Helm chart:
+
+```bash
+./e2e/kind-e2e.sh          # Build and test
+BUILD=0 ./e2e/kind-e2e.sh  # Skip build, use existing image
 ```
 
 The test:
 
-1. Creates a Kind cluster
-2. Deploys Jaeger for trace collection
-3. Deploys HAProxy Ingress Controller with OTEL module
-4. Deploys a test echo-server with Ingress
+1. Creates a Kind cluster with NodePort mappings (9080→30080, 9443→30443)
+2. Installs HAProxy Ingress Controller via official Helm chart with custom OTEL image
+3. Deploys Jaeger for trace collection
+4. Deploys a test nginx backend with Ingress
 5. Sends HTTP requests through the ingress
 6. Verifies traces appear in Jaeger
 
-The Kind cluster is automatically deleted after the test.
+## Files
+
+| File                  | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `e2e.sh`              | Docker Compose e2e test (CI)                    |
+| `kind-e2e.sh`         | Kind/Helm e2e test (Kubernetes)                 |
+| `docker-compose.yaml` | Services for Docker Compose test                |
+| `haproxy.cfg`         | HAProxy config for Docker Compose test          |
+| `kind-config.yaml`    | Kind cluster configuration with port mappings   |
+| `helm-values.yaml`    | Helm values for HAProxy with OTEL configuration |
+| `test-app.yaml`       | Test application (Jaeger + nginx + Ingress)     |
 
 ## Platform Support
 
-The script runs identically locally and in CI:
+Both scripts detect architecture automatically:
 
-- **Local (macOS ARM64)**: Auto-detects Colima, builds for `linux/arm64`
-- **CI (Linux x86_64)**: Builds for `linux/amd64`
+- **macOS ARM64**: Auto-detects Colima, builds for `linux/arm64`
+- **Linux x86_64**: Builds for `linux/amd64`
 
-Override the platform if needed:
+Override if needed:
 
 ```bash
 PLATFORM=linux/amd64 ./e2e/e2e.sh
 ```
 
-## Debugging
-
-If tests fail, the script outputs:
-
-- Pod status
-- Pod descriptions
-- Container logs
-- Kubernetes events
-
-To run interactively for debugging:
+## Manual Kind Testing
 
 ```bash
-# Create cluster and deploy
-BUILD=0 ./e2e/e2e.sh &
-# Ctrl+C after deployment succeeds
+# Create cluster
+kind create cluster --name haproxy-otel --config e2e/kind-config.yaml
 
-# Inspect manually
-kubectl get pods -A
-kubectl logs -n haproxy-ingress -l app=haproxy-ingress -f
+# Build and load image
+docker build -t haproxy-otel:test .
+kind load docker-image haproxy-otel:test --name haproxy-otel
+
+# Install via Helm
+helm repo add haproxytech https://haproxytech.github.io/helm-charts
+helm install haproxy-ingress haproxytech/kubernetes-ingress \
+    -n haproxy-ingress --create-namespace \
+    -f e2e/helm-values.yaml
+
+# Deploy test app
+kubectl apply -f e2e/test-app.yaml
+
+# Test
+curl -H "Host: echo.local" http://localhost:9080/
 
 # Access Jaeger UI
 kubectl port-forward -n haproxy-otel-e2e svc/jaeger 16686:16686
 open http://localhost:16686
 
 # Cleanup
-kind delete cluster --name haproxy-otel-e2e
+kind delete cluster --name haproxy-otel
 ```

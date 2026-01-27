@@ -57,6 +57,8 @@ COPY --from=ingress-source /init /init
 COPY --from=ingress-source /etc/s6-overlay /etc/s6-overlay
 COPY --from=ingress-source /command /command
 COPY --from=ingress-source /package /package
+COPY --from=ingress-source /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
+COPY --from=ingress-source /etc/haproxy/errors /etc/haproxy/errors
 
 # Install s6-overlay binaries (redownload for correct architecture)
 RUN case "${TARGETPLATFORM}" in \
@@ -75,21 +77,22 @@ RUN case "${TARGETPLATFORM}" in \
     rm -f /tmp/s6-overlay-scripts.tar.xz /tmp/s6-overlay-binaries.tar.xz
 
 # Create Lua module directory and copy OTEL module
-RUN mkdir -p /usr/local/lib/lua/5.4 /etc/haproxy/lua
+RUN mkdir -p /usr/local/lib/lua/5.4 /etc/haproxy/lua /var/lib/haproxy
 COPY --from=rust-builder /build/target/release/libhaproxy_otel_module.so /usr/local/lib/lua/5.4/haproxy_otel_module.so
 
 # Copy OTEL Lua configuration script
 COPY otel.lua /etc/haproxy/lua/otel.lua
 
 # Set permissions
-RUN chown -R haproxy:haproxy /usr/local/etc/haproxy /run /var /etc/haproxy/lua && \
-    chmod -R ug+rwx /usr/local/etc/haproxy /run /var && \
+RUN chown -R haproxy:haproxy /usr/local/etc/haproxy /run /var /var/lib/haproxy /etc/haproxy/lua && \
+    chmod -R ug+rwx /usr/local/etc/haproxy /run /var /var/lib/haproxy && \
     chown -R haproxy:haproxy /init /etc/s6-overlay 2>/dev/null || true && \
     chmod u+x /init /start.sh /etc/s6-overlay/scripts/* 2>/dev/null || true && \
     chown haproxy:haproxy /usr/local/lib/lua/5.4/haproxy_otel_module.so && \
     chown haproxy:haproxy /etc/haproxy/lua/otel.lua
 
-USER haproxy
+# Run as root like the original kubernetes-ingress image to allow chroot
+USER root
 
 # Set Lua path to include our module
 ENV LUA_CPATH="/usr/local/lib/lua/5.4/?.so;;"

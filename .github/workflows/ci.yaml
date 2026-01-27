@@ -150,14 +150,14 @@ jobs:
           cache-from: type=gha
           platforms: linux/amd64
 
-      - uses: helm/kind-action@v1
-        with:
-          install_only: true
-
       - name: Run E2E tests
         run: |
           chmod +x e2e/e2e.sh
           BUILD=0 PLATFORM=linux/amd64 ./e2e/e2e.sh
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f e2e/docker-compose.yaml down -v 2>/dev/null || true
 
   # ============================================================================
   # Stage 3: Build (parallel with tests, after lint)

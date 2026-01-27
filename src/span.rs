@@ -63,6 +63,49 @@ pub(crate) fn set_span_attribute(
     Ok(())
 }
 
+/// Ends the server span for the current transaction.
+/// Should be called via http-after-response or http-response action.
+pub(crate) fn end_server_span(_lua: &Lua, txn: Txn) -> LuaResult<()> {
+    // Only end if this transaction has a server span
+    if !txn
+        .get_var::<bool>("txn.__otel_server_span")
+        .unwrap_or_default()
+    {
+        return Ok(());
+    }
+
+    let context = match crate::remove_context(&txn) {
+        Some(cx) => cx,
+        None => return Ok(()),
+    };
+
+    let span = context.span();
+
+    // Set response status
+    let status = (txn.f.get::<Option<i64>>("txn_status", ())?).unwrap_or_default();
+    span.set_attribute(KeyValue::new(
+        opentelemetry_semantic_conventions::trace::HTTP_RESPONSE_STATUS_CODE,
+        status,
+    ));
+    if status < 500 {
+        span.set_status(trace::Status::Ok);
+    } else {
+        span.set_status(trace::Status::error("5xx status code"));
+    }
+
+    // Set HAProxy-specific attributes
+    let fe_name = txn.f.get_str("fe_name", ())?;
+    span.set_attribute(KeyValue::new("haproxy.frontend.name", fe_name));
+    let be_name = txn.f.get_str("be_name", ())?;
+    span.set_attribute(KeyValue::new("haproxy.backend.name", be_name));
+    if let Ok(Some(term_state)) = txn.f.get::<Option<String>>("txn_sess_term_state", ()) {
+        span.set_attribute(KeyValue::new("haproxy.termination_state", term_state));
+    }
+
+    span.end();
+    Ok(())
+}
+
 /// Convert only specific tracing headers to a map for context extraction
 fn tracing_headers2map(headers: haproxy_api::Headers) -> LuaResult<HashMap<String, String>> {
     let mut map = HashMap::new();

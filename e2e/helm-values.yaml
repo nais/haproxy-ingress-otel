@@ -1,0 +1,33 @@
+controller:
+  image:
+    repository: haproxy-otel
+    tag: test
+    pullPolicy: Never
+
+  service:
+    type: NodePort
+    nodePorts:
+      http: 30080
+      https: 30443
+      stat: 30024
+
+  extraEnvs:
+    - name: OTEL_SERVICE_NAME
+      value: "haproxy-ingress"
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://jaeger.haproxy-otel-e2e.svc.cluster.local:4318/v1/traces"
+    - name: OTEL_TRACES_SAMPLER
+      value: "always_on"
+    - name: OTEL_PROPAGATORS
+      value: "w3c"
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: "json"
+
+  config:
+    global-config-snippet: |
+      tune.lua.bool-sample-conversion pre-3.1-bug
+      insecure-fork-wanted
+      lua-load-per-thread /etc/haproxy/lua/otel.lua
+    frontend-config-snippet: |
+      http-request lua.start_server_span
+      filter lua.opentelemetry-trace
