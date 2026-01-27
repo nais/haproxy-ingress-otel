@@ -1,6 +1,6 @@
 # E2E Tests
 
-End-to-end tests for the HAProxy OTEL module.
+End-to-end tests for the HAProxy Ingress Controller OTEL module.
 
 ## Test Types
 
@@ -65,11 +65,11 @@ PLATFORM=linux/amd64 ./e2e/e2e.sh
 
 ```bash
 # Create cluster
-kind create cluster --name haproxy-otel --config e2e/kind-config.yaml
+kind create cluster --name haproxy-ingress-otel --config e2e/kind-config.yaml
 
 # Build and load image
-docker build -t haproxy-otel:test .
-kind load docker-image haproxy-otel:test --name haproxy-otel
+docker build -t haproxy-ingress-otel:test .
+kind load docker-image haproxy-ingress-otel:test --name haproxy-ingress-otel
 
 # Install via Helm
 helm repo add haproxytech https://haproxytech.github.io/helm-charts
@@ -84,9 +84,9 @@ kubectl apply -f e2e/test-app.yaml
 curl -H "Host: echo.local" http://localhost:9080/
 
 # Access Jaeger UI
-kubectl port-forward -n haproxy-otel-e2e svc/jaeger 16686:16686
+kubectl port-forward -n haproxy-ingress-otel-e2e svc/jaeger 16686:16686
 open http://localhost:16686
 
 # Cleanup
-kind delete cluster --name haproxy-otel
+kind delete cluster --name haproxy-ingress-otel
 ```

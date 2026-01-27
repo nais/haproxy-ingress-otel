@@ -1,6 +1,6 @@
 services:
   haproxy:
-    image: haproxy-otel:test
+    image: haproxy-ingress-otel:test
     pull_policy: never
     platform: ${PLATFORM:-linux/amd64}
     user: root

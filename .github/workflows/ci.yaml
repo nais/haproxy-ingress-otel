@@ -94,7 +94,7 @@ jobs:
         with:
           context: .
           load: true
-          tags: haproxy-otel:test
+          tags: haproxy-ingress-otel:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
@@ -104,7 +104,7 @@ jobs:
           OUTPUT=$(docker run --rm --user root --entrypoint sh \
             -e OTEL_SERVICE_NAME=test-service \
             -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-            haproxy-otel:test -c '
+            haproxy-ingress-otel:test -c '
             cat > /tmp/test.cfg << "EOF"
           global
               tune.lua.bool-sample-conversion pre-3.1-bug
@@ -146,7 +146,7 @@ jobs:
         with:
           context: .
           load: true
-          tags: haproxy-otel:test
+          tags: haproxy-ingress-otel:test
           cache-from: type=gha
           platforms: linux/amd64
 

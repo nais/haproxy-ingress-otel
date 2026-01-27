@@ -1,0 +1,8 @@
+[tools]
+rust = "1.87"
+kind = "latest"
+helm = "latest"
+kubectl = "latest"
+
+[env]
+RUST_BACKTRACE = "1"

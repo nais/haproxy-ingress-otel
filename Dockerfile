@@ -100,7 +100,7 @@ ENV LUA_CPATH="/usr/local/lib/lua/5.4/?.so;;"
 # Labels for image metadata
 LABEL org.opencontainers.image.title="HAProxy Kubernetes Ingress with OpenTelemetry" \
       org.opencontainers.image.description="HAProxy Tech Kubernetes Ingress Controller with pre-compiled OpenTelemetry tracing module" \
-      org.opencontainers.image.source="https://github.com/nais/haproxy-otel" \
+      org.opencontainers.image.source="https://github.com/nais/haproxy-ingress-otel" \
       org.opencontainers.image.vendor="NAIS" \
       org.opencontainers.image.base.name="haproxytech/haproxy-debian:3.2"
 

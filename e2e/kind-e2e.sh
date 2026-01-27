@@ -15,8 +15,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CLUSTER_NAME="haproxy-otel"
-IMAGE_NAME="haproxy-otel:test"
+CLUSTER_NAME="haproxy-ingress-otel"
+IMAGE_NAME="haproxy-ingress-otel:test"
 
 # Detect architecture (can be overridden with PLATFORM env var)
 if [[ -n "${PLATFORM:-}" ]]; then
@@ -53,17 +53,17 @@ trap cleanup EXIT INT TERM
 if [[ "${BUILD:-}" == "0" ]]; then
     echo "==> Skipping build (BUILD=0)"
 elif [[ "${BUILD:-}" == "1" ]] || ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
-    echo "==> Building haproxy-otel image for $PLATFORM..."
+    echo "==> Building haproxy-ingress-otel image for $PLATFORM..."
     docker build --platform "$PLATFORM" -t "$IMAGE_NAME" "$REPO_ROOT"
 else
-    echo "==> Using existing haproxy-otel image (set BUILD=1 to rebuild)"
+    echo "==> Using existing haproxy-ingress-otel image (set BUILD=1 to rebuild)"
 fi
 
 echo "==> Creating kind cluster..."
 kind delete cluster --name "$CLUSTER_NAME" 2>/dev/null || true
 kind create cluster --name "$CLUSTER_NAME" --config "$SCRIPT_DIR/kind-config.yaml" --wait 120s
 
-echo "==> Loading haproxy-otel image into kind..."
+echo "==> Loading haproxy-ingress-otel image into kind..."
 kind load docker-image "$IMAGE_NAME" --name "$CLUSTER_NAME"
 
 echo "==> Adding Helm repo..."
@@ -83,10 +83,10 @@ echo "==> Initial pod status:"
 kubectl get pods -A
 
 echo "==> Waiting for Jaeger to be ready..."
-kubectl wait --for=condition=available --timeout=120s deployment/jaeger -n haproxy-otel-e2e
+kubectl wait --for=condition=available --timeout=120s deployment/jaeger -n haproxy-ingress-otel-e2e
 
 echo "==> Waiting for echo-server to be ready..."
-kubectl wait --for=condition=available --timeout=60s deployment/echo-server -n haproxy-otel-e2e
+kubectl wait --for=condition=available --timeout=60s deployment/echo-server -n haproxy-ingress-otel-e2e
 
 echo "==> HAProxy Ingress status:"
 kubectl get pods -n haproxy-ingress
@@ -107,7 +107,7 @@ echo "==> Verifying traces in Jaeger..."
 echo "    Waiting for batch exporter to flush..."
 sleep 5
 
-kubectl port-forward -n haproxy-otel-e2e svc/jaeger 16686:16686 &
+kubectl port-forward -n haproxy-ingress-otel-e2e svc/jaeger 16686:16686 &
 JAEGER_PF_PID=$!
 sleep 3
 

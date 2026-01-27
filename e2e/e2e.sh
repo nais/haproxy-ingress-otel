@@ -15,7 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-IMAGE_NAME="haproxy-otel:test"
+IMAGE_NAME="haproxy-ingress-otel:test"
 
 # Detect architecture (can be overridden with PLATFORM env var)
 if [[ -n "${PLATFORM:-}" ]]; then
@@ -52,10 +52,10 @@ trap cleanup EXIT INT TERM
 if [[ "${BUILD:-}" == "0" ]]; then
     echo "==> Skipping build (BUILD=0)"
 elif [[ "${BUILD:-}" == "1" ]] || ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
-    echo "==> Building haproxy-otel image for $PLATFORM..."
+    echo "==> Building haproxy-ingress-otel image for $PLATFORM..."
     docker build --platform "$PLATFORM" -t "$IMAGE_NAME" "$REPO_ROOT"
 else
-    echo "==> Using existing haproxy-otel image (set BUILD=1 to rebuild)"
+    echo "==> Using existing haproxy-ingress-otel image (set BUILD=1 to rebuild)"
 fi
 
 echo "==> Starting services..."
