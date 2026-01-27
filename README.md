@@ -116,6 +116,31 @@ http-request set-var-fmt(txn.user_id) "%[req.hdr(User-ID)]"
 http-request lua.set_span_attribute_var user.id txn.user_id
 ```
 
+### Access Log with Trace Context
+
+The module exposes trace and span IDs as HAProxy transaction variables for use in access logs:
+
+| Variable            | Description               |
+| ------------------- | ------------------------- |
+| `txn.otel_trace_id` | 32-character hex trace ID |
+| `txn.otel_span_id`  | 16-character hex span ID  |
+
+Example log format configuration:
+
+```yaml
+controller:
+  config:
+    defaults-config-snippet: |
+      log-format "%ci:%cp [%tr] %ft %b/%s %TR/%Tw/%Tc/%Tr/%Ta %ST %B %tsc %ac/%fc/%bc/%sc/%rc %sq/%bq %hr %hs %{+Q}r trace_id=%[var(txn.otel_trace_id)] span_id=%[var(txn.otel_span_id)]"
+```
+
+Or directly in HAProxy config:
+
+```haproxy
+defaults
+    log-format "%ci:%cp [%tr] %ft %b/%s %ST %B %{+Q}r trace_id=%[var(txn.otel_trace_id)] span_id=%[var(txn.otel_span_id)]"
+```
+
 ## Complete Helm Values Example
 
 ```yaml

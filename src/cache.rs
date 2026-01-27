@@ -2,6 +2,7 @@ use std::sync::OnceLock;
 
 use haproxy_api::Txn;
 use mlua::prelude::LuaString;
+use opentelemetry::trace::TraceContextExt as _;
 use opentelemetry::{Context, TraceId};
 
 // This is a global cache to store the context of the spans
@@ -23,7 +24,9 @@ pub(crate) fn get_context(txn: &Txn) -> Option<Context> {
 // Store the context in the globally cache to share it between listeners/frontends
 pub(crate) fn store_context(txn: &Txn, trace_id: TraceId, context: Context) {
     let trace_id = const_hex::encode(trace_id.to_bytes());
+    let span_id = const_hex::encode(context.span().span_context().span_id().to_bytes());
     let _ = txn.set_var("txn.otel_trace_id", &*trace_id);
+    let _ = txn.set_var("txn.otel_span_id", &*span_id);
     TRACE_CACHE
         .get_or_init(init_cache)
         .insert(trace_id, context);

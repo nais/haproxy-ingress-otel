@@ -93,6 +93,30 @@ async fn run_tests(server: &MockServer) -> Result<(), Box<dyn std::error::Error>
         .await?;
     assert_eq!(response.status(), 200);
 
+    // Verify trace_id and span_id headers are present and valid
+    let trace_id = response
+        .headers()
+        .get("x-trace-id")
+        .expect("X-Trace-Id header missing")
+        .to_str()
+        .unwrap();
+    let span_id = response
+        .headers()
+        .get("x-span-id")
+        .expect("X-Span-Id header missing")
+        .to_str()
+        .unwrap();
+    assert_eq!(trace_id.len(), 32, "Trace ID should be 32 hex characters");
+    assert_eq!(span_id.len(), 16, "Span ID should be 16 hex characters");
+    assert!(
+        trace_id.chars().all(|c| c.is_ascii_hexdigit()),
+        "Trace ID should be hex"
+    );
+    assert!(
+        span_id.chars().all(|c| c.is_ascii_hexdigit()),
+        "Span ID should be hex"
+    );
+
     // Verify b3 headers propagation
     let http_req = (http_mock.received_requests().await)
         .pop()
@@ -168,6 +192,30 @@ async fn run_tests(server: &MockServer) -> Result<(), Box<dyn std::error::Error>
     // Make a _local_ request to HAProxy (non-proxied)
     let response = client.get("http://localhost:8080/status").send().await?;
     assert_eq!(response.status(), 200);
+
+    // Verify trace_id and span_id headers for local request
+    let trace_id = response
+        .headers()
+        .get("x-trace-id")
+        .expect("X-Trace-Id header missing on local request")
+        .to_str()
+        .unwrap();
+    let span_id = response
+        .headers()
+        .get("x-span-id")
+        .expect("X-Span-Id header missing on local request")
+        .to_str()
+        .unwrap();
+    assert_eq!(
+        trace_id.len(),
+        32,
+        "Local trace ID should be 32 hex characters"
+    );
+    assert_eq!(
+        span_id.len(),
+        16,
+        "Local span ID should be 16 hex characters"
+    );
 
     // Verify the received OTLP spans
     timeout(Duration::from_secs(10), otlp_mock.wait_until_satisfied())
