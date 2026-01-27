@@ -103,7 +103,7 @@ RUN mkdir -p /usr/local/lib/lua/5.4 /etc/haproxy/lua /var/lib/haproxy
 COPY --from=rust-builder /build/target/release/libhaproxy_otel_module.so /usr/local/lib/lua/5.4/haproxy_otel_module.so
 
 # Copy OTEL Lua configuration script
-COPY otel.lua /etc/haproxy/lua/otel.lua
+COPY lua/otel.lua /etc/haproxy/lua/otel.lua
 
 # Set permissions
 RUN chown -R haproxy:haproxy /usr/local/etc/haproxy /run /var /var/lib/haproxy /etc/haproxy/lua && \
