@@ -35,7 +35,8 @@ mise run sync-versions     # Propagate versions.env changes
 │   └── runtime.rs     # Tokio runtime management
 ├── module/            # Lua C module wrapper (cdylib)
 ├── tests/             # Integration tests (require HAProxy+Lua)
-├── otel.lua           # Lua loader script
+├── lua/
+│   └── otel.lua       # Lua loader script
 ├── e2e/               # End-to-end test infrastructure
 ├── versions.env       # Single source of truth for versions
 ├── Dockerfile         # Multi-stage build
@@ -98,5 +99,5 @@ git commit -am "deps: bump X"
 - Commit secrets or credentials
 - Modify `versions.env` without running `sync-versions`
 - Remove or skip failing tests
-- Change the public Lua API without updating otel.lua
+- Change the public Lua API without updating lua/otel.lua
 - Edit files in `.local/` (build artifacts)

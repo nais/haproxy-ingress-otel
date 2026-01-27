@@ -167,25 +167,9 @@ The Docker image contains:
 - Pre-compiled OTEL Lua module (`/usr/local/lib/lua/5.4/haproxy_otel_module.so`)
 - Default OTEL config (`/etc/haproxy/lua/otel.lua`)
 
-## Development
+## Contributing
 
-### Building
-
-```bash
-docker build -t haproxy-ingress-otel:test .
-```
-
-### Testing
-
-```bash
-# Docker Compose e2e test
-./e2e/e2e.sh
-
-# Kubernetes e2e test (requires kind, helm)
-./e2e/kind-e2e.sh
-```
-
-See [e2e/README.md](e2e/README.md) for detailed testing instructions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and version management.
 
 ## Version Policy
 
