@@ -199,8 +199,12 @@ pub fn init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'st
     }
 
     // Build the exporter based on protocol
+    // gRPC requires Tokio runtime context during builder execution
     let processor = match protocol {
         Protocol::Grpc => {
+            // Enter the HAProxy Tokio runtime for gRPC client initialization
+            // Tonic/hyper requires an active runtime during connection setup
+            let _guard = haproxy_api::runtime().enter();
             let exporter = opentelemetry_otlp::SpanExporter::builder()
                 .with_tonic()
                 .with_endpoint(&traces_endpoint)
