@@ -1,6 +1,7 @@
 use std::env;
 use std::error::Error as StdError;
 use std::fmt;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use opentelemetry_jaeger_propagator as opentelemetry_jaeger;
 use opentelemetry_otlp::WithExportConfig;
@@ -13,6 +14,97 @@ use opentelemetry_sdk::Resource;
 const DEFAULT_HTTP_ENDPOINT: &str = "http://localhost:4318";
 const DEFAULT_GRPC_ENDPOINT: &str = "http://localhost:4317";
 const TRACES_PATH: &str = "v1/traces";
+
+/// Global log level for OTEL SDK messages (OTEL_LOG_LEVEL)
+/// Values: 0=off, 1=error, 2=warn, 3=info, 4=debug
+static LOG_LEVEL: AtomicU8 = AtomicU8::new(3); // Default: info
+
+/// Log levels per OTEL spec (OTEL_LOG_LEVEL)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum LogLevel {
+    Off = 0,
+    Error = 1,
+    Warn = 2,
+    #[default]
+    Info = 3,
+    Debug = 4,
+}
+
+impl fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LogLevel::Off => write!(f, "off"),
+            LogLevel::Error => write!(f, "error"),
+            LogLevel::Warn => write!(f, "warn"),
+            LogLevel::Info => write!(f, "info"),
+            LogLevel::Debug => write!(f, "debug"),
+        }
+    }
+}
+
+impl LogLevel {
+    /// Parse log level from string (case-insensitive per OTEL spec)
+    fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "off" | "none" => Some(LogLevel::Off),
+            "error" | "fatal" => Some(LogLevel::Error),
+            "warn" | "warning" => Some(LogLevel::Warn),
+            "info" => Some(LogLevel::Info),
+            "debug" | "trace" => Some(LogLevel::Debug),
+            _ => None,
+        }
+    }
+}
+
+/// Read OTEL_LOG_LEVEL from environment
+fn resolve_log_level() -> (LogLevel, ConfigSource) {
+    if let Ok(level) = env::var("OTEL_LOG_LEVEL") {
+        if let Some(l) = LogLevel::from_str(&level) {
+            return (l, ConfigSource::EnvGeneral);
+        }
+        // Per spec: warn on unrecognized value, fall back to default
+        eprintln!(
+            "haproxy-otel: warning: unrecognized OTEL_LOG_LEVEL='{}', using 'info'",
+            level
+        );
+    }
+    (LogLevel::default(), ConfigSource::Default)
+}
+
+/// Log at error level
+#[allow(dead_code)]
+#[inline]
+fn log_error(msg: &str) {
+    if LOG_LEVEL.load(Ordering::Relaxed) >= LogLevel::Error as u8 {
+        eprintln!("haproxy-otel error: {}", msg);
+    }
+}
+
+/// Log at warn level
+#[allow(dead_code)]
+#[inline]
+fn log_warn(msg: &str) {
+    if LOG_LEVEL.load(Ordering::Relaxed) >= LogLevel::Warn as u8 {
+        eprintln!("haproxy-otel warn: {}", msg);
+    }
+}
+
+/// Log at info level
+#[inline]
+fn log_info(msg: &str) {
+    if LOG_LEVEL.load(Ordering::Relaxed) >= LogLevel::Info as u8 {
+        eprintln!("haproxy-otel: {}", msg);
+    }
+}
+
+/// Log at debug level
+#[allow(dead_code)]
+#[inline]
+fn log_debug(msg: &str) {
+    if LOG_LEVEL.load(Ordering::Relaxed) >= LogLevel::Debug as u8 {
+        eprintln!("haproxy-otel debug: {}", msg);
+    }
+}
 
 /// Supported protocols per OTLP spec
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -162,6 +254,10 @@ fn resolve_protocol(options: &Options) -> (Protocol, ConfigSource) {
 }
 
 pub fn init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'static>> {
+    // Resolve log level first (affects all subsequent logging)
+    let (log_level, log_level_source) = resolve_log_level();
+    LOG_LEVEL.store(log_level as u8, Ordering::Relaxed);
+
     // Resolve protocol and endpoint first (needed for logging)
     let (protocol, protocol_source) = resolve_protocol(&options);
     let (base_endpoint, endpoint_source) = resolve_endpoint(&options, &protocol);
@@ -170,16 +266,18 @@ pub fn init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'st
     let sampler = options.sampler.as_deref().unwrap_or("ParentBased");
 
     // Log the resolved configuration
-    eprintln!(
-        "haproxy-otel: service={} protocol={} ({}) endpoint={} ({}) propagator={} sampler={}",
+    log_info(&format!(
+        "service={} protocol={} ({}) endpoint={} ({}) propagator={} sampler={} log_level={} ({})",
         options.service_name,
         protocol,
         protocol_source,
         traces_endpoint,
         endpoint_source,
         propagator,
-        sampler
-    );
+        sampler,
+        log_level,
+        log_level_source
+    ));
 
     // Configure propagator
     match propagator {
@@ -521,5 +619,93 @@ mod tests {
         );
         assert_eq!(format!("{}", ConfigSource::EnvGeneral), "env");
         assert_eq!(format!("{}", ConfigSource::Default), "default");
+    }
+
+    #[test]
+    fn test_log_level_default() {
+        assert_eq!(LogLevel::default(), LogLevel::Info);
+    }
+
+    #[test]
+    fn test_log_level_display() {
+        assert_eq!(format!("{}", LogLevel::Off), "off");
+        assert_eq!(format!("{}", LogLevel::Error), "error");
+        assert_eq!(format!("{}", LogLevel::Warn), "warn");
+        assert_eq!(format!("{}", LogLevel::Info), "info");
+        assert_eq!(format!("{}", LogLevel::Debug), "debug");
+    }
+
+    #[test]
+    fn test_log_level_from_str() {
+        // Standard values
+        assert_eq!(LogLevel::from_str("off"), Some(LogLevel::Off));
+        assert_eq!(LogLevel::from_str("error"), Some(LogLevel::Error));
+        assert_eq!(LogLevel::from_str("warn"), Some(LogLevel::Warn));
+        assert_eq!(LogLevel::from_str("info"), Some(LogLevel::Info));
+        assert_eq!(LogLevel::from_str("debug"), Some(LogLevel::Debug));
+
+        // Case insensitive
+        assert_eq!(LogLevel::from_str("DEBUG"), Some(LogLevel::Debug));
+        assert_eq!(LogLevel::from_str("INFO"), Some(LogLevel::Info));
+        assert_eq!(LogLevel::from_str("Error"), Some(LogLevel::Error));
+
+        // Aliases
+        assert_eq!(LogLevel::from_str("none"), Some(LogLevel::Off));
+        assert_eq!(LogLevel::from_str("fatal"), Some(LogLevel::Error));
+        assert_eq!(LogLevel::from_str("warning"), Some(LogLevel::Warn));
+        assert_eq!(LogLevel::from_str("trace"), Some(LogLevel::Debug));
+
+        // Invalid
+        assert_eq!(LogLevel::from_str("invalid"), None);
+        assert_eq!(LogLevel::from_str(""), None);
+    }
+
+    #[test]
+    fn test_log_level_ordering() {
+        // Verify log levels are ordered correctly for comparison
+        assert!(LogLevel::Off < LogLevel::Error);
+        assert!(LogLevel::Error < LogLevel::Warn);
+        assert!(LogLevel::Warn < LogLevel::Info);
+        assert!(LogLevel::Info < LogLevel::Debug);
+    }
+
+    #[test]
+    fn test_resolve_log_level_default() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        env::remove_var("OTEL_LOG_LEVEL");
+
+        let (level, source) = resolve_log_level();
+        assert_eq!(level, LogLevel::Info);
+        assert_eq!(source, ConfigSource::Default);
+    }
+
+    #[test]
+    fn test_resolve_log_level_from_env() {
+        let _lock = ENV_LOCK.lock().unwrap();
+
+        env::set_var("OTEL_LOG_LEVEL", "debug");
+        let (level, source) = resolve_log_level();
+        assert_eq!(level, LogLevel::Debug);
+        assert_eq!(source, ConfigSource::EnvGeneral);
+
+        env::set_var("OTEL_LOG_LEVEL", "error");
+        let (level, source) = resolve_log_level();
+        assert_eq!(level, LogLevel::Error);
+        assert_eq!(source, ConfigSource::EnvGeneral);
+
+        env::remove_var("OTEL_LOG_LEVEL");
+    }
+
+    #[test]
+    fn test_resolve_log_level_invalid_falls_back() {
+        let _lock = ENV_LOCK.lock().unwrap();
+
+        env::set_var("OTEL_LOG_LEVEL", "invalid_value");
+        let (level, source) = resolve_log_level();
+        // Falls back to default on invalid value (per spec, logs warning)
+        assert_eq!(level, LogLevel::Info);
+        assert_eq!(source, ConfigSource::Default);
+
+        env::remove_var("OTEL_LOG_LEVEL");
     }
 }

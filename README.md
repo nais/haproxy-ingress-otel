@@ -69,6 +69,7 @@ All environment variable names follow the [OTLP specification](https://opentelem
 | `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` | Signal-specific protocol override     | -                             |
 | `OTEL_TRACES_SAMPLER`                | Sampling strategy                     | `parentbased_always_on`       |
 | `OTEL_PROPAGATORS`                   | Propagation format                    | `w3c`                         |
+| `OTEL_LOG_LEVEL`                     | SDK logging verbosity                 | `info`                        |
 
 **Endpoint behavior:**
 
@@ -98,6 +99,82 @@ All environment variable names follow the [OTLP specification](https://opentelem
 | `w3c`, `tracecontext` | W3C Trace Context |
 | `zipkin`, `b3`        | Zipkin B3         |
 | `jaeger`              | Jaeger            |
+
+### Log Levels
+
+| Value   | Description                        |
+| ------- | ---------------------------------- |
+| `off`   | Disable all logging                |
+| `error` | Only errors                        |
+| `warn`  | Errors and warnings                |
+| `info`  | Configuration at startup (default) |
+| `debug` | Verbose debugging output           |
+
+## Debugging
+
+### Startup Verification
+
+At startup, the module logs its resolved configuration to stderr. Look for a line like:
+
+```text
+haproxy-otel: service=haproxy-ingress protocol=http/protobuf (default) endpoint=http://collector:4318/v1/traces (env) propagator=w3c sampler=ParentBased log_level=info (default)
+```
+
+This shows:
+
+- `service`: The service name used in traces
+- `protocol`: Transport protocol and its source
+- `endpoint`: The final endpoint URL and its source
+- `propagator`: Context propagation format
+- `sampler`: Sampling strategy
+- `log_level`: Current logging verbosity
+
+Configuration sources are shown in parentheses: `lua config`, `env (traces-specific)`, `env`, or `default`.
+
+### Common Issues
+
+**No traces appearing:**
+
+1. Verify the Lua module is loaded - check HAProxy logs for the startup message
+2. Verify `lua-load-per-thread` directive is in your HAProxy config
+3. Check endpoint connectivity: `curl -v http://collector:4318/v1/traces`
+4. Verify the frontend snippets are applied (check HAProxy config dump)
+
+**Traces show 00000000... for trace IDs:**
+
+The trace context isn't being propagated. Check:
+
+- The filter is applied: `filter lua.opentelemetry-trace`
+- The span is started: `http-request lua.start_server_span`
+- The propagator matches your upstream (`w3c`, `jaeger`, `b3`)
+
+**Module not loading:**
+
+Verify HAProxy can find the shared library:
+
+```bash
+# Inside the container
+ls -la /usr/local/lib/lua/5.4/haproxy_otel_module.so
+haproxy -c -f /etc/haproxy/haproxy.cfg
+```
+
+### Log Level Configuration
+
+Set `OTEL_LOG_LEVEL=debug` to see verbose output:
+
+```yaml
+extraEnvs:
+  - name: OTEL_LOG_LEVEL
+    value: "debug"
+```
+
+Or silence all module output:
+
+```yaml
+extraEnvs:
+  - name: OTEL_LOG_LEVEL
+    value: "off"
+```
 
 ## HAProxy Config Snippets
 
