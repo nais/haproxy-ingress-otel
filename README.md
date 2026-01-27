@@ -58,15 +58,22 @@ docker pull ghcr.io/nais/haproxy-ingress-otel:latest
 
 ### Environment Variables
 
-| Variable                      | Description             | Default                 |
-| ----------------------------- | ----------------------- | ----------------------- |
-| `OTEL_SERVICE_NAME`           | Service name for traces | `haproxy-ingress`       |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint | `http://localhost:4318` |
-| `OTEL_TRACES_SAMPLER`         | Sampling strategy       | `parentbased_always_on` |
-| `OTEL_PROPAGATORS`            | Propagation format      | `w3c`                   |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | Protocol format         | `json`                  |
+All environment variable names follow the [OTLP specification](https://opentelemetry.io/docs/specs/otel/protocol/exporter/).
 
-The `/v1/traces` path is automatically appended to the endpoint per the OTLP specification.
+| Variable                             | Description                           | Default                       |
+| ------------------------------------ | ------------------------------------- | ----------------------------- |
+| `OTEL_SERVICE_NAME`                  | Service name for traces               | `haproxy-ingress`             |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`        | Base OTLP collector endpoint          | `:4318` (HTTP) `:4317` (gRPC) |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Signal-specific endpoint (used as-is) | -                             |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`        | Transport protocol                    | `http/protobuf`               |
+| `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` | Signal-specific protocol override     | -                             |
+| `OTEL_TRACES_SAMPLER`                | Sampling strategy                     | `parentbased_always_on`       |
+| `OTEL_PROPAGATORS`                   | Propagation format                    | `w3c`                         |
+
+**Endpoint behavior:**
+
+- For `OTEL_EXPORTER_OTLP_ENDPOINT`: The `/v1/traces` path is automatically appended for HTTP protocols
+- For `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: Used as-is without modification
 
 ### Sampler Values
 
@@ -75,6 +82,14 @@ The `/v1/traces` path is automatically appended to the endpoint per the OTLP spe
 | `always_on`             | Sample all traces           |
 | `always_off`            | Sample no traces            |
 | `parentbased_always_on` | Follow parent span decision |
+
+### Protocol Values
+
+| Value           | Description                           | Default Port |
+| --------------- | ------------------------------------- | ------------ |
+| `grpc`          | gRPC with protobuf encoding           | 4317         |
+| `http/protobuf` | HTTP with protobuf encoding (default) | 4318         |
+| `http/json`     | HTTP with JSON encoding               | 4318         |
 
 ### Propagator Values
 
@@ -162,7 +177,7 @@ controller:
     - name: OTEL_PROPAGATORS
       value: "w3c"
     - name: OTEL_EXPORTER_OTLP_PROTOCOL
-      value: "json"
+      value: "http/protobuf"  # or "grpc" for gRPC transport
 
   # HAProxy config to enable OTEL
   config:
@@ -183,8 +198,9 @@ controller:
 - Server-side span for incoming requests
 - Client-side span for upstream proxying
 - Custom attributes support
-- OTLP HTTP exporter (JSON/protobuf)
+- OTLP exporter with gRPC and HTTP support (protobuf/JSON)
 - W3C, Zipkin, and Jaeger propagation formats
+- Full OTLP specification compliance for environment variables
 
 ## What's Included
 
