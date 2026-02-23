@@ -92,7 +92,7 @@ spec:
         runAsGroup: 1000
       containers:
         - name: haproxy-ingress
-          image: haproxytech/kubernetes-ingress:3.2.5
+          image: haproxytech/kubernetes-ingress:3.2.6
           args:
             - --default-ssl-certificate=haproxy-ingress/haproxy-default-cert
             - --configmap=haproxy-ingress/haproxy-config
