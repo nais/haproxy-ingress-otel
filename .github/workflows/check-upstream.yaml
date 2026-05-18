@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   check-haproxy-ingress:
@@ -78,8 +79,23 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create update PR
+      - name: Verify Docker image exists
+        id: docker_check
         if: steps.compare.outputs.update_available == 'true' && steps.existing.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          LATEST="${{ steps.upstream.outputs.version }}"
+          # Verify the Docker image is actually published before creating a PR
+          if docker manifest inspect "docker.io/haproxytech/kubernetes-ingress:${LATEST}" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "::notice::Docker image haproxytech/kubernetes-ingress:${LATEST} exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "::warning::Docker image haproxytech/kubernetes-ingress:${LATEST} not yet published, skipping PR"
+          fi
+
+      - name: Create update PR
+        if: steps.compare.outputs.update_available == 'true' && steps.existing.outputs.exists == 'false' && steps.docker_check.outputs.exists == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CURRENT_VERSION: ${{ steps.current.outputs.version }}
@@ -133,6 +149,18 @@ jobs:
           gh pr create \
             --title "deps: update HAProxy Ingress to $LATEST_VERSION" \
             --body-file /tmp/pr-body.md
+
+      - name: Trigger CI on PR branch
+        if: steps.compare.outputs.update_available == 'true' && steps.existing.outputs.exists == 'false' && steps.docker_check.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST_VERSION: ${{ steps.upstream.outputs.version }}
+        run: |
+          set -euo pipefail
+          BRANCH="deps/haproxy-ingress-$LATEST_VERSION"
+          # Trigger CI workflow on the PR branch so checks appear on the PR
+          # (PRs created by github-actions[bot] don't trigger pull_request workflows)
+          gh workflow run ci.yaml --ref "$BRANCH"
 
   check-s6-overlay:
     name: Check s6-overlay
