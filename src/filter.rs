@@ -180,6 +180,12 @@ impl Injector for HeaderInjector<'_> {
         if self.silent_on && key.eq_ignore_ascii_case("x-b3-sampled") {
             return;
         }
+        // Skip empty header values. The W3C propagator always injects a
+        // `tracestate` header even when it is empty, and an empty header
+        // breaks downstream consumers such as fluentbit.
+        if value.is_empty() {
+            return;
+        }
         let _ = self.msg.set_header(key, value);
     }
 }
