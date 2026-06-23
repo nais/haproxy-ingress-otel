@@ -31,6 +31,7 @@ controller:
     frontend-config-snippet: |
       http-request lua.start_server_span
       filter lua.opentelemetry-trace
+      http-after-response lua.end_server_span
 ```
 
 ```bash
@@ -146,6 +147,7 @@ The trace context isn't being propagated. Check:
 
 - The filter is applied: `filter lua.opentelemetry-trace`
 - The span is started: `http-request lua.start_server_span`
+- The span is ended (required for applets/denies): `http-after-response lua.end_server_span`
 - The propagator matches your upstream (`w3c`, `jaeger`, `b3`)
 
 **Module not loading:**
@@ -191,6 +193,7 @@ controller:
     frontend-config-snippet: |
       http-request lua.start_server_span
       filter lua.opentelemetry-trace
+      http-after-response lua.end_server_span
 ```
 
 ### Filter Options
@@ -265,6 +268,7 @@ controller:
     frontend-config-snippet: |
       http-request lua.start_server_span
       filter lua.opentelemetry-trace
+      http-after-response lua.end_server_span
 
   service:
     type: LoadBalancer

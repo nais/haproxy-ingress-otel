@@ -3,6 +3,10 @@ use mlua::prelude::{Lua, LuaExternalResult as _, LuaResult, LuaTable};
 
 pub(crate) use cache::{get_context, remove_context, store_context};
 
+pub fn cache_size(_lua: &Lua, _: ()) -> LuaResult<usize> {
+    Ok(cache::get_size())
+}
+
 pub fn register(lua: &Lua, options: LuaTable) -> LuaResult<()> {
     let core = Core::new(lua)?;
 

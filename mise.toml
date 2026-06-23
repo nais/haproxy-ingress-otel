@@ -197,3 +197,7 @@ run = """
 export PATH="${LOCAL_BUILD:-$PWD/.local}/bin:$PATH"
 cargo test --workspace -- --nocapture
 """
+
+[tasks.all]
+description = "Run all standard checks (versions, lint, test, integration test, build)"
+depends = ["check-versions", "lint", "test", "test-integration", "build"]

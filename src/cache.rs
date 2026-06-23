@@ -34,8 +34,13 @@ pub(crate) fn store_context(txn: &Txn, trace_id: TraceId, context: Context) {
 
 pub(crate) fn remove_context(txn: &Txn) -> Option<Context> {
     let trace_id = txn.get_var::<LuaString>("txn.otel_trace_id").ok()?;
+    let trace_str = trace_id.to_str().ok()?;
     TRACE_CACHE
         .get_or_init(init_cache)
-        .remove(&*trace_id.to_str().ok()?)
+        .remove(&*trace_str)
         .map(|(_, context)| context)
+}
+
+pub(crate) fn get_size() -> usize {
+    TRACE_CACHE.get().map(|c| c.len()).unwrap_or(0)
 }

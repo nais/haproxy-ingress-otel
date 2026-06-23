@@ -57,3 +57,16 @@ core.Info("OpenTelemetry initialized: service=" .. service_name ..
           " endpoint=" .. endpoint ..
           " sampler=" .. sampler ..
           " propagator=" .. propagator)
+
+core.register_service("otel_metrics", "http", function(applet)
+    local otel = package.loaded["haproxy_otel_module"] or require("haproxy_otel_module")
+    local size = otel.cache_size()
+    local response = "# HELP haproxy_otel_cache_size Number of spans currently in the thread-local cache\\n" ..
+                     "# TYPE haproxy_otel_cache_size gauge\\n" ..
+                     "haproxy_otel_cache_size " .. tostring(size) .. "\\n"
+    applet:set_status(200)
+    applet:add_header("content-length", string.len(response))
+    applet:add_header("content-type", "text/plain")
+    applet:start_response()
+    applet:send(response)
+end)
