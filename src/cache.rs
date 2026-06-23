@@ -18,18 +18,21 @@ pub(crate) fn get_context(txn: &Txn) -> Option<Context> {
     let trace_id = match txn.get_var::<LuaString>("txn.otel_trace_id") {
         Ok(t) => t,
         Err(_) => {
-            eprintln!("get_context: no txn.otel_trace_id var");
+            crate::exporter::log_debug("get_context: no txn.otel_trace_id var");
             return None;
         }
     };
     let mut trace_bytes = [0u8; 16];
     if let Err(e) = const_hex::decode_to_slice(trace_id.as_bytes(), &mut trace_bytes) {
-        eprintln!("get_context: decode hex failed: {}", e);
+        crate::exporter::log_warn(&format!("get_context: decode hex failed: {}", e));
         return None;
     }
     let res = TRACE_CACHE.get_or_init(init_cache).get(&trace_bytes);
     if res.is_none() {
-        eprintln!("get_context: not found in cache for {:?}", trace_bytes);
+        crate::exporter::log_debug(&format!(
+            "get_context: not found in cache for {:?}",
+            trace_bytes
+        ));
     }
     res
 }
@@ -50,13 +53,13 @@ pub(crate) fn remove_context(txn: &Txn) -> Option<Context> {
     let trace_id = match txn.get_var::<LuaString>("txn.otel_trace_id") {
         Ok(t) => t,
         Err(_) => {
-            eprintln!("remove_context: no txn.otel_trace_id var");
+            crate::exporter::log_debug("remove_context: no txn.otel_trace_id var");
             return None;
         }
     };
     let mut trace_bytes = [0u8; 16];
     if let Err(e) = const_hex::decode_to_slice(trace_id.as_bytes(), &mut trace_bytes) {
-        eprintln!("remove_context: decode hex failed: {}", e);
+        crate::exporter::log_warn(&format!("remove_context: decode hex failed: {}", e));
         return None;
     }
     let res = TRACE_CACHE
@@ -64,7 +67,10 @@ pub(crate) fn remove_context(txn: &Txn) -> Option<Context> {
         .remove(&trace_bytes)
         .map(|(_, context)| context);
     if res.is_none() {
-        eprintln!("remove_context: not found in cache for {:?}", trace_bytes);
+        crate::exporter::log_debug(&format!(
+            "remove_context: not found in cache for {:?}",
+            trace_bytes
+        ));
     }
     res
 }

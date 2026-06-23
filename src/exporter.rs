@@ -74,18 +74,16 @@ fn resolve_log_level() -> (LogLevel, ConfigSource) {
 }
 
 /// Log at error level
-#[allow(dead_code)]
 #[inline]
-fn log_error(msg: &str) {
+pub(crate) fn log_error(msg: &str) {
     if LOG_LEVEL.load(Ordering::Relaxed) >= LogLevel::Error as u8 {
         eprintln!("haproxy-otel error: {}", msg);
     }
 }
 
 /// Log at warn level
-#[allow(dead_code)]
 #[inline]
-fn log_warn(msg: &str) {
+pub(crate) fn log_warn(msg: &str) {
     if LOG_LEVEL.load(Ordering::Relaxed) >= LogLevel::Warn as u8 {
         eprintln!("haproxy-otel warn: {}", msg);
     }
@@ -100,9 +98,8 @@ fn log_info(msg: &str) {
 }
 
 /// Log at debug level
-#[allow(dead_code)]
 #[inline]
-fn log_debug(msg: &str) {
+pub(crate) fn log_debug(msg: &str) {
     if LOG_LEVEL.load(Ordering::Relaxed) >= LogLevel::Debug as u8 {
         eprintln!("haproxy-otel debug: {}", msg);
     }

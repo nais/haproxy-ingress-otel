@@ -15,7 +15,7 @@ use crate::{get_context, store_context};
 pub(crate) fn start_server_span(lua: &Lua, txn: Txn) -> LuaResult<()> {
     if let Some(options) = lua.app_data_ref::<crate::exporter::Options>() {
         if let Err(e) = crate::exporter::init(options.clone()) {
-            eprintln!("haproxy-otel: lazy init failed: {}", e);
+            crate::exporter::log_error(&format!("haproxy-otel: lazy init failed: {}", e));
         }
     }
     let tracer = opentelemetry::global::tracer("haproxy-otel");
