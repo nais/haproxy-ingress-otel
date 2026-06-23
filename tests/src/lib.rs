@@ -49,6 +49,8 @@ async fn integration_tests() {
     // Spawn haproxy and wait
     let mut haproxy = tokio::process::Command::new("haproxy")
         .args(&["-f", "haproxy.cfg"])
+        .env("RUST_LOG", "debug")
+        .env("OTEL_LOG_LEVEL", "debug")
         .kill_on_drop(true)
         .spawn()
         .expect("Failed to start haproxy");
@@ -66,6 +68,7 @@ async fn mount_http_mock(server: &MockServer) -> MockGuard {
         .and(path("/test"))
         .respond_with(ResponseTemplate::new(200).set_body_string("Hello from test server"))
         .expect(1)
+        .named("HTTP Mock")
         .mount_as_scoped(&server)
         .await
 }
@@ -76,6 +79,7 @@ async fn mount_otlp_mock(server: &MockServer) -> MockGuard {
         .and(path("/v1/traces"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({"accepted": true})))
         .expect(1)
+        .named("OTLP Mock")
         .mount_as_scoped(&server)
         .await
 }
@@ -87,25 +91,29 @@ async fn run_tests(server: &MockServer) -> Result<(), Box<dyn std::error::Error>
     // Make a request to HAProxy
     let client = reqwest::Client::new();
     let response = client
-        .get("http://localhost:8080/test")
+        .get("http://127.0.0.1:8082/test")
         .header("X-Test-Header", "test-value")
         .send()
         .await?;
-    assert_eq!(response.status(), 200);
-
-    // Verify trace_id and span_id headers are present and valid
+    let status = response.status();
     let trace_id = response
         .headers()
         .get("x-trace-id")
         .expect("X-Trace-Id header missing")
         .to_str()
-        .unwrap();
+        .unwrap()
+        .to_string();
     let span_id = response
         .headers()
         .get("x-span-id")
         .expect("X-Span-Id header missing")
         .to_str()
-        .unwrap();
+        .unwrap()
+        .to_string();
+    let text = response.text().await.unwrap_or_default();
+    println!("Response for /test: status={}, body={}", status, text);
+    assert_eq!(status, 200);
+    // Validate headers
     assert_eq!(trace_id.len(), 32, "Trace ID should be 32 hex characters");
     assert_eq!(span_id.len(), 16, "Span ID should be 16 hex characters");
     assert!(
@@ -190,22 +198,25 @@ async fn run_tests(server: &MockServer) -> Result<(), Box<dyn std::error::Error>
     otlp_mock = mount_otlp_mock(server).await;
 
     // Make a _local_ request to HAProxy (non-proxied)
-    let response = client.get("http://localhost:8080/status").send().await?;
-    assert_eq!(response.status(), 200);
-
-    // Verify trace_id and span_id headers for local request
+    let response = client.get("http://127.0.0.1:8082/status").send().await?;
+    let status = response.status();
     let trace_id = response
         .headers()
         .get("x-trace-id")
-        .expect("X-Trace-Id header missing on local request")
+        .expect("X-Trace-Id header missing")
         .to_str()
-        .unwrap();
+        .unwrap()
+        .to_string();
     let span_id = response
         .headers()
         .get("x-span-id")
-        .expect("X-Span-Id header missing on local request")
+        .expect("X-Span-Id header missing")
         .to_str()
-        .unwrap();
+        .unwrap()
+        .to_string();
+    let text = response.text().await.unwrap_or_default();
+    println!("Response for /status: status={}, body={}", status, text);
+    assert_eq!(status, 200);
     assert_eq!(
         trace_id.len(),
         32,

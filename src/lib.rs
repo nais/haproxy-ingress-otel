@@ -1,5 +1,5 @@
 use haproxy_api::{Action, Core};
-use mlua::prelude::{Lua, LuaExternalResult as _, LuaResult, LuaTable};
+use mlua::prelude::{Lua, LuaResult, LuaTable};
 
 pub(crate) use cache::{get_context, remove_context, store_context};
 
@@ -26,9 +26,7 @@ pub fn register(lua: &Lua, options: LuaTable) -> LuaResult<()> {
     };
     lua.set_app_data(options.clone());
 
-    if core.thread()? <= 1 {
-        core.register_task(move |_lua| exporter::init(options.clone()).into_lua_err())?;
-    }
+    // Lazy initialization happens in start_server_span
 
     #[rustfmt::skip]
     core.register_action("start_server_span", &[Action::HttpReq], 0, span::start_server_span)?;
@@ -52,5 +50,4 @@ pub fn register(lua: &Lua, options: LuaTable) -> LuaResult<()> {
 mod cache;
 mod exporter;
 mod filter;
-mod runtime;
 mod span;

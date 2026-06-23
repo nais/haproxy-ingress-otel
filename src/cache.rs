@@ -15,10 +15,23 @@ fn init_cache() -> quick_cache::sync::Cache<[u8; 16], Context> {
 
 // Get the context from the global cache
 pub(crate) fn get_context(txn: &Txn) -> Option<Context> {
-    let trace_id = txn.get_var::<LuaString>("txn.otel_trace_id").ok()?;
+    let trace_id = match txn.get_var::<LuaString>("txn.otel_trace_id") {
+        Ok(t) => t,
+        Err(_) => {
+            eprintln!("get_context: no txn.otel_trace_id var");
+            return None;
+        }
+    };
     let mut trace_bytes = [0u8; 16];
-    const_hex::decode_to_slice(trace_id.as_bytes(), &mut trace_bytes).ok()?;
-    TRACE_CACHE.get_or_init(init_cache).get(&trace_bytes)
+    if let Err(e) = const_hex::decode_to_slice(trace_id.as_bytes(), &mut trace_bytes) {
+        eprintln!("get_context: decode hex failed: {}", e);
+        return None;
+    }
+    let res = TRACE_CACHE.get_or_init(init_cache).get(&trace_bytes);
+    if res.is_none() {
+        eprintln!("get_context: not found in cache for {:?}", trace_bytes);
+    }
+    res
 }
 
 // Store the context in the globally cache to share it between listeners/frontends
@@ -34,13 +47,26 @@ pub(crate) fn store_context(txn: &Txn, trace_id: TraceId, context: Context) {
 }
 
 pub(crate) fn remove_context(txn: &Txn) -> Option<Context> {
-    let trace_id = txn.get_var::<LuaString>("txn.otel_trace_id").ok()?;
+    let trace_id = match txn.get_var::<LuaString>("txn.otel_trace_id") {
+        Ok(t) => t,
+        Err(_) => {
+            eprintln!("remove_context: no txn.otel_trace_id var");
+            return None;
+        }
+    };
     let mut trace_bytes = [0u8; 16];
-    const_hex::decode_to_slice(trace_id.as_bytes(), &mut trace_bytes).ok()?;
-    TRACE_CACHE
+    if let Err(e) = const_hex::decode_to_slice(trace_id.as_bytes(), &mut trace_bytes) {
+        eprintln!("remove_context: decode hex failed: {}", e);
+        return None;
+    }
+    let res = TRACE_CACHE
         .get_or_init(init_cache)
         .remove(&trace_bytes)
-        .map(|(_, context)| context)
+        .map(|(_, context)| context);
+    if res.is_none() {
+        eprintln!("remove_context: not found in cache for {:?}", trace_bytes);
+    }
+    res
 }
 
 pub(crate) fn get_size() -> usize {

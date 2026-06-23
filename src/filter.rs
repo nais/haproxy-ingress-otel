@@ -98,11 +98,15 @@ impl UserFilter for TraceFilter {
     const METHODS: u8 = FilterMethod::END_ANALYZE | FilterMethod::HTTP_HEADERS;
 
     fn new(lua: &Lua, args: LuaTable) -> LuaResult<Self> {
-        let mut this = Self::default();
-        this.silent_on = lua
+        let silent_on = lua
             .app_data_ref::<crate::exporter::Options>()
             .map(|c| c.sampler.as_deref() == Some("SilentOn"))
             .unwrap_or_default();
+
+        let mut this = Self {
+            silent_on,
+            ..Default::default()
+        };
         if let Ok(args) = args.get::<String>(1) {
             for arg in args.split(';') {
                 let (name, value) = arg.split_once('=').unwrap_or_default();
@@ -126,6 +130,7 @@ impl UserFilter for TraceFilter {
         if chn.is_resp()? {
             // Finish client span
             if self.start_client_span.unwrap_or(true) {
+                let _guard = crate::exporter::get_otel_runtime().enter();
                 self.context.span().end();
             }
 
@@ -165,6 +170,7 @@ impl UserFilter for TraceFilter {
                 termination_state,
             ));
 
+            let _guard = crate::exporter::get_otel_runtime().enter();
             span.end();
 
             // Explicitly clear the context to free memory instantly.

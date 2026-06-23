@@ -12,7 +12,12 @@ use opentelemetry_semantic_conventions::trace::{
 use crate::{get_context, store_context};
 
 /// Starts a server span for the current transaction.
-pub(crate) fn start_server_span(_lua: &Lua, txn: Txn) -> LuaResult<()> {
+pub(crate) fn start_server_span(lua: &Lua, txn: Txn) -> LuaResult<()> {
+    if let Some(options) = lua.app_data_ref::<crate::exporter::Options>() {
+        if let Err(e) = crate::exporter::init(options.clone()) {
+            eprintln!("haproxy-otel: lazy init failed: {}", e);
+        }
+    }
     let tracer = opentelemetry::global::tracer("haproxy-otel");
     let http = txn.http()?;
 
@@ -102,6 +107,7 @@ pub(crate) fn end_server_span(_lua: &Lua, txn: Txn) -> LuaResult<()> {
         span.set_attribute(KeyValue::new("haproxy.termination_state", term_state));
     }
 
+    let _guard = crate::exporter::get_otel_runtime().enter();
     span.end();
     Ok(())
 }

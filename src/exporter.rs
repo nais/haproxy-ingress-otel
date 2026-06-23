@@ -2,7 +2,8 @@ use std::env;
 use std::error::Error as StdError;
 use std::fmt;
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::Once;
+use std::sync::OnceLock;
+use tokio::runtime::Runtime;
 
 use opentelemetry_jaeger_propagator as opentelemetry_jaeger;
 use opentelemetry_otlp::WithExportConfig;
@@ -12,8 +13,8 @@ use opentelemetry_sdk::trace::{RandomIdGenerator, Sampler, SdkTracerProvider};
 use opentelemetry_sdk::Resource;
 
 /// Default endpoints per OTLP spec
-const DEFAULT_HTTP_ENDPOINT: &str = "http://localhost:4318";
-const DEFAULT_GRPC_ENDPOINT: &str = "http://localhost:4317";
+const DEFAULT_HTTP_ENDPOINT: &str = "http://127.0.0.1:4318";
+const DEFAULT_GRPC_ENDPOINT: &str = "http://127.0.0.1:4317";
 const TRACES_PATH: &str = "v1/traces";
 
 /// Global log level for OTEL SDK messages (OTEL_LOG_LEVEL)
@@ -254,21 +255,28 @@ fn resolve_protocol(options: &Options) -> (Protocol, ConfigSource) {
     (Protocol::default(), ConfigSource::Default)
 }
 
-static INIT_ONCE: Once = Once::new();
+static INIT_RESULT: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+
+static OTEL_RUNTIME: OnceLock<Runtime> = OnceLock::new();
+
+pub fn get_otel_runtime() -> &'static Runtime {
+    OTEL_RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .worker_threads(1)
+            .thread_name("haproxy-otel")
+            .build()
+            .expect("Failed to create OTel Tokio runtime")
+    })
+}
 
 pub fn init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'static>> {
-    let mut init_err = None;
+    let res = INIT_RESULT.get_or_init(|| do_init(options).map_err(|e| e.to_string()));
 
-    INIT_ONCE.call_once(|| {
-        if let Err(e) = do_init(options) {
-            init_err = Some(e);
-        }
-    });
-
-    if let Some(e) = init_err {
-        return Err(e);
+    match res {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e.clone().into()),
     }
-    Ok(())
 }
 
 fn do_init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'static>> {
@@ -318,30 +326,48 @@ fn do_init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'sta
     // gRPC requires Tokio runtime context during builder execution
     let processor = match protocol {
         Protocol::Grpc => {
-            // Enter the HAProxy Tokio runtime for gRPC client initialization
-            // Tonic/hyper requires an active runtime during connection setup
-            let _guard = haproxy_api::runtime().enter();
+            let _guard = get_otel_runtime().enter();
             let exporter = opentelemetry_otlp::SpanExporter::builder()
                 .with_tonic()
                 .with_endpoint(&traces_endpoint)
                 .build()?;
-            BatchSpanProcessor::builder(exporter, crate::runtime::HaproxyTokio::new()).build()
+            BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+                .with_batch_config(
+                    opentelemetry_sdk::trace::BatchConfigBuilder::default()
+                        .with_scheduled_delay(std::time::Duration::from_millis(100))
+                        .build(),
+                )
+                .build()
         }
         Protocol::HttpProtobuf => {
+            let _guard = get_otel_runtime().enter();
             let exporter = opentelemetry_otlp::SpanExporter::builder()
                 .with_http()
                 .with_endpoint(&traces_endpoint)
                 .with_protocol(opentelemetry_otlp::Protocol::HttpBinary)
                 .build()?;
-            BatchSpanProcessor::builder(exporter, crate::runtime::HaproxyTokio::new()).build()
+            BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+                .with_batch_config(
+                    opentelemetry_sdk::trace::BatchConfigBuilder::default()
+                        .with_scheduled_delay(std::time::Duration::from_millis(100))
+                        .build(),
+                )
+                .build()
         }
         Protocol::HttpJson => {
+            let _guard = get_otel_runtime().enter();
             let exporter = opentelemetry_otlp::SpanExporter::builder()
                 .with_http()
                 .with_endpoint(&traces_endpoint)
                 .with_protocol(opentelemetry_otlp::Protocol::HttpJson)
                 .build()?;
-            BatchSpanProcessor::builder(exporter, crate::runtime::HaproxyTokio::new()).build()
+            BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio)
+                .with_batch_config(
+                    opentelemetry_sdk::trace::BatchConfigBuilder::default()
+                        .with_scheduled_delay(std::time::Duration::from_millis(100))
+                        .build(),
+                )
+                .build()
         }
     };
 
@@ -444,14 +470,14 @@ mod tests {
 
     #[test]
     fn test_protocol_default_endpoint() {
-        assert_eq!(Protocol::Grpc.default_endpoint(), "http://localhost:4317");
+        assert_eq!(Protocol::Grpc.default_endpoint(), "http://127.0.0.1:4317");
         assert_eq!(
             Protocol::HttpProtobuf.default_endpoint(),
-            "http://localhost:4318"
+            "http://127.0.0.1:4318"
         );
         assert_eq!(
             Protocol::HttpJson.default_endpoint(),
-            "http://localhost:4318"
+            "http://127.0.0.1:4318"
         );
     }
 
@@ -553,11 +579,11 @@ mod tests {
 
         env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://env:4318");
         let options = Options {
-            endpoint: Some("http://lua:4318".to_string()),
+            endpoint: Some("http://127.0.0.1:4317/v1/traces".to_string()),
             ..default_options()
         };
         let (endpoint, source) = resolve_endpoint(&options, &Protocol::HttpProtobuf);
-        assert_eq!(endpoint, "http://lua:4318");
+        assert_eq!(endpoint, "http://127.0.0.1:4317/v1/traces");
         assert_eq!(source, ConfigSource::LuaConfig);
 
         clear_otel_env_vars();
@@ -596,7 +622,7 @@ mod tests {
         clear_otel_env_vars();
 
         let (endpoint, source) = resolve_endpoint(&default_options(), &Protocol::HttpProtobuf);
-        assert_eq!(endpoint, "http://localhost:4318");
+        assert_eq!(endpoint, "http://127.0.0.1:4318");
         assert_eq!(source, ConfigSource::Default);
     }
 
@@ -606,7 +632,7 @@ mod tests {
         clear_otel_env_vars();
 
         let (endpoint, source) = resolve_endpoint(&default_options(), &Protocol::Grpc);
-        assert_eq!(endpoint, "http://localhost:4317");
+        assert_eq!(endpoint, "http://127.0.0.1:4317");
         assert_eq!(source, ConfigSource::Default);
     }
 
@@ -622,7 +648,7 @@ mod tests {
             ..default_options()
         };
         let (endpoint, source) = resolve_endpoint(&options, &Protocol::HttpProtobuf);
-        assert_eq!(endpoint, "http://localhost:4318");
+        assert_eq!(endpoint, "http://127.0.0.1:4318");
         assert_eq!(source, ConfigSource::Default);
 
         clear_otel_env_vars();
