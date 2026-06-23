@@ -25,15 +25,15 @@ pub(crate) fn start_server_span(_lua: &Lua, txn: Txn) -> LuaResult<()> {
     let host = headers.get("host").cloned().unwrap_or_default();
     let peer_addr = txn.f.get_str("src", ())?;
 
-    let mut uri_parts = uri.splitn(2, '?').map(|s| s.to_string());
+    let (path, query) = uri.split_once('?').unwrap_or((&uri, ""));
     let span_builder = tracer
         .span_builder(format!("{method} {host}"))
         .with_kind(trace::SpanKind::Server)
         .with_start_time(SystemTime::now())
         .with_attributes([
             KeyValue::new(HTTP_REQUEST_METHOD, method),
-            KeyValue::new(URL_PATH, uri_parts.next().unwrap_or_default()),
-            KeyValue::new(URL_QUERY, uri_parts.next().unwrap_or_default()),
+            KeyValue::new(URL_PATH, path.to_string()),
+            KeyValue::new(URL_QUERY, query.to_string()),
             KeyValue::new("http.request.header.host", host),
             KeyValue::new(NETWORK_PEER_ADDRESS, peer_addr),
         ]);

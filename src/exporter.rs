@@ -2,6 +2,7 @@ use std::env;
 use std::error::Error as StdError;
 use std::fmt;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::Once;
 
 use opentelemetry_jaeger_propagator as opentelemetry_jaeger;
 use opentelemetry_otlp::WithExportConfig;
@@ -253,7 +254,24 @@ fn resolve_protocol(options: &Options) -> (Protocol, ConfigSource) {
     (Protocol::default(), ConfigSource::Default)
 }
 
+static INIT_ONCE: Once = Once::new();
+
 pub fn init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'static>> {
+    let mut init_err = None;
+
+    INIT_ONCE.call_once(|| {
+        if let Err(e) = do_init(options) {
+            init_err = Some(e);
+        }
+    });
+
+    if let Some(e) = init_err {
+        return Err(e);
+    }
+    Ok(())
+}
+
+fn do_init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'static>> {
     // Resolve log level first (affects all subsequent logging)
     let (log_level, log_level_source) = resolve_log_level();
     LOG_LEVEL.store(log_level as u8, Ordering::Relaxed);
@@ -707,5 +725,23 @@ mod tests {
         assert_eq!(source, ConfigSource::Default);
 
         env::remove_var("OTEL_LOG_LEVEL");
+    }
+
+    #[test]
+    fn test_init_multiple_calls_succeed() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        clear_otel_env_vars();
+
+        let options = default_options();
+
+        // First call should succeed
+        // Note: we can't easily assert on the internal side effects because it modifies global state
+        // and starts a tokio runtime, but we can verify it doesn't panic or error.
+        let res1 = init(options.clone());
+        assert!(res1.is_ok());
+
+        // Second call should also succeed immediately without running initialization again
+        let res2 = init(options);
+        assert!(res2.is_ok());
     }
 }

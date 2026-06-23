@@ -12,6 +12,7 @@ use crate::{get_context, remove_context};
 #[derive(Default)]
 pub(crate) struct TraceFilter {
     start_client_span: Option<bool>,
+    silent_on: bool,
     context: Context,
 }
 
@@ -19,7 +20,7 @@ impl TraceFilter {
     // This method is called before proxying the request to the server (upstream)
     fn on_request_headers(
         &mut self,
-        lua: &Lua,
+        _lua: &Lua,
         txn: Txn,
         msg: HttpMessage,
     ) -> LuaResult<FilterResult> {
@@ -38,26 +39,25 @@ impl TraceFilter {
 
         let method = txn.f.get_str("method", ())?;
         let uri = txn.f.get_str("pathq", ())?;
-        let mut uri_parts = uri.splitn(2, '?').map(|s| s.to_string());
+        let (path, query) = uri.split_once('?').unwrap_or((&uri, ""));
 
         let span_builder = tracer
             .span_builder("upstream")
             .with_kind(trace::SpanKind::Client)
             .with_attributes([
                 KeyValue::new(HTTP_REQUEST_METHOD, method),
-                KeyValue::new(URL_PATH, uri_parts.next().unwrap_or_default()),
-                KeyValue::new(URL_QUERY, uri_parts.next().unwrap_or_default()),
+                KeyValue::new(URL_PATH, path.to_string()),
+                KeyValue::new(URL_QUERY, query.to_string()),
             ]);
         let span = tracer.build_with_context(span_builder, &parent_context);
         self.context = parent_context.with_span(span);
 
         // Inject tracing headers
-        let silent_on = lua
-            .app_data_ref::<crate::exporter::Options>()
-            .map(|c| c.sampler.as_deref() == Some("SilentOn"))
-            .unwrap_or_default();
         opentelemetry::global::get_text_map_propagator(|injector| {
-            injector.inject_context(&self.context, &mut HeaderInjector::new(&msg, silent_on));
+            injector.inject_context(
+                &self.context,
+                &mut HeaderInjector::new(&msg, self.silent_on),
+            );
         });
 
         Ok(FilterResult::Continue)
@@ -97,8 +97,12 @@ impl TraceFilter {
 impl UserFilter for TraceFilter {
     const METHODS: u8 = FilterMethod::END_ANALYZE | FilterMethod::HTTP_HEADERS;
 
-    fn new(_lua: &Lua, args: LuaTable) -> LuaResult<Self> {
+    fn new(lua: &Lua, args: LuaTable) -> LuaResult<Self> {
         let mut this = Self::default();
+        this.silent_on = lua
+            .app_data_ref::<crate::exporter::Options>()
+            .map(|c| c.sampler.as_deref() == Some("SilentOn"))
+            .unwrap_or_default();
         if let Ok(args) = args.get::<String>(1) {
             for arg in args.split(';') {
                 let (name, value) = arg.split_once('=').unwrap_or_default();
@@ -130,12 +134,16 @@ impl UserFilter for TraceFilter {
                 .get_var::<bool>("txn.__otel_server_span")
                 .unwrap_or_default()
             {
+                self.context = Context::default();
                 return Ok(FilterResult::Continue);
             }
 
             let parent_context = match remove_context(&txn) {
                 Some(cx) => cx,
-                None => return Ok(FilterResult::Continue),
+                None => {
+                    self.context = Context::default();
+                    return Ok(FilterResult::Continue);
+                }
             };
             let span = parent_context.span();
             let status = (txn.f.get::<Option<i64>>("txn_status", ())?).unwrap_or_default();
@@ -158,6 +166,11 @@ impl UserFilter for TraceFilter {
             ));
 
             span.end();
+
+            // Explicitly clear the context to free memory instantly.
+            // Otherwise, the memory is held until the Lua garbage collector
+            // decides to clean up the TraceFilter userdata, causing massive OOMs.
+            self.context = Context::default();
         }
 
         Ok(FilterResult::Continue)
