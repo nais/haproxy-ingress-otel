@@ -3,8 +3,8 @@ use std::time::SystemTime;
 
 use haproxy_api::Txn;
 use mlua::prelude::{Lua, LuaResult, LuaString, LuaTable};
-use opentelemetry::trace::{self, Span, TraceContextExt, Tracer};
 use opentelemetry::KeyValue;
+use opentelemetry::trace::{self, Span, TraceContextExt, Tracer};
 use opentelemetry_semantic_conventions::trace::{
     HTTP_REQUEST_METHOD, NETWORK_PEER_ADDRESS, URL_PATH, URL_QUERY,
 };
@@ -13,10 +13,10 @@ use crate::{get_context, store_context};
 
 /// Starts a server span for the current transaction.
 pub(crate) fn start_server_span(lua: &Lua, txn: Txn) -> LuaResult<()> {
-    if let Some(options) = lua.app_data_ref::<crate::exporter::Options>() {
-        if let Err(e) = crate::exporter::init(options.clone()) {
-            crate::exporter::log_error(&format!("haproxy-otel: lazy init failed: {}", e));
-        }
+    if let Some(options) = lua.app_data_ref::<crate::exporter::Options>()
+        && let Err(e) = crate::exporter::init(options.clone())
+    {
+        crate::exporter::log_error(&format!("haproxy-otel: lazy init failed: {}", e));
     }
     let tracer = opentelemetry::global::tracer("haproxy-otel");
     let http = txn.http()?;
@@ -60,10 +60,10 @@ pub(crate) fn set_span_attribute(
     _lua: &Lua,
     (txn, name, var_name): (Txn, String, String),
 ) -> LuaResult<()> {
-    if let Ok(value) = txn.get_var::<String>(&var_name) {
-        if let Some(context) = get_context(&txn) {
-            context.span().set_attribute(KeyValue::new(name, value));
-        }
+    if let Ok(value) = txn.get_var::<String>(&var_name)
+        && let Some(context) = get_context(&txn)
+    {
+        context.span().set_attribute(KeyValue::new(name, value));
     }
     Ok(())
 }

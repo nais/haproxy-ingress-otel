@@ -2,7 +2,7 @@
 name = "haproxy-otel"
 version = "0.2.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "NAIS <nais@nav.no>"]
-edition = "2021"
+edition = "2024"
 repository = "https://github.com/nais/haproxy-otel"
 autotests = false
 readme = "README.md"

@@ -2,7 +2,7 @@
 
 use std::net::TcpListener;
 
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use std::time::Duration;
 use tokio::time::timeout;
 use wiremock::matchers::{method, path};

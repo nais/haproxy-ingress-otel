@@ -1,16 +1,16 @@
 use std::env;
 use std::error::Error as StdError;
 use std::fmt;
-use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU8, Ordering};
 use tokio::runtime::Runtime;
 
 use opentelemetry_jaeger_propagator as opentelemetry_jaeger;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::span_processor_with_async_runtime::BatchSpanProcessor;
 use opentelemetry_sdk::trace::{RandomIdGenerator, Sampler, SdkTracerProvider};
-use opentelemetry_sdk::Resource;
 
 /// Default endpoints per OTLP spec
 const DEFAULT_HTTP_ENDPOINT: &str = "http://127.0.0.1:4318";
@@ -196,25 +196,25 @@ pub(crate) struct Options {
 /// Returns the endpoint and the source it came from
 fn resolve_endpoint(options: &Options, protocol: &Protocol) -> (String, ConfigSource) {
     // 1. Check options (Lua config)
-    if let Some(ref ep) = options.endpoint {
-        if !ep.is_empty() {
-            return (ep.clone(), ConfigSource::LuaConfig);
-        }
+    if let Some(ref ep) = options.endpoint
+        && !ep.is_empty()
+    {
+        return (ep.clone(), ConfigSource::LuaConfig);
     }
 
     // 2. Check OTEL_EXPORTER_OTLP_TRACES_ENDPOINT (signal-specific, used as-is)
-    if let Ok(ep) = env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") {
-        if !ep.is_empty() {
-            // Per spec: signal-specific endpoint is used as-is (no /v1/traces appended)
-            return (ep, ConfigSource::EnvTracesSpecific);
-        }
+    if let Ok(ep) = env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+        && !ep.is_empty()
+    {
+        // Per spec: signal-specific endpoint is used as-is (no /v1/traces appended)
+        return (ep, ConfigSource::EnvTracesSpecific);
     }
 
     // 3. Check OTEL_EXPORTER_OTLP_ENDPOINT (base URL)
-    if let Ok(ep) = env::var("OTEL_EXPORTER_OTLP_ENDPOINT") {
-        if !ep.is_empty() {
-            return (ep, ConfigSource::EnvGeneral);
-        }
+    if let Ok(ep) = env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+        && !ep.is_empty()
+    {
+        return (ep, ConfigSource::EnvGeneral);
     }
 
     // 4. Default based on protocol
@@ -228,24 +228,24 @@ fn resolve_endpoint(options: &Options, protocol: &Protocol) -> (String, ConfigSo
 /// Returns the protocol and the source it came from
 fn resolve_protocol(options: &Options) -> (Protocol, ConfigSource) {
     // 1. Check options (Lua config)
-    if let Some(ref proto) = options.protocol {
-        if let Some(p) = Protocol::from_str(proto) {
-            return (p, ConfigSource::LuaConfig);
-        }
+    if let Some(ref proto) = options.protocol
+        && let Some(p) = Protocol::from_str(proto)
+    {
+        return (p, ConfigSource::LuaConfig);
     }
 
     // 2. Check OTEL_EXPORTER_OTLP_TRACES_PROTOCOL (signal-specific)
-    if let Ok(proto) = env::var("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL") {
-        if let Some(p) = Protocol::from_str(&proto) {
-            return (p, ConfigSource::EnvTracesSpecific);
-        }
+    if let Ok(proto) = env::var("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL")
+        && let Some(p) = Protocol::from_str(&proto)
+    {
+        return (p, ConfigSource::EnvTracesSpecific);
     }
 
     // 3. Check OTEL_EXPORTER_OTLP_PROTOCOL (general)
-    if let Ok(proto) = env::var("OTEL_EXPORTER_OTLP_PROTOCOL") {
-        if let Some(p) = Protocol::from_str(&proto) {
-            return (p, ConfigSource::EnvGeneral);
-        }
+    if let Ok(proto) = env::var("OTEL_EXPORTER_OTLP_PROTOCOL")
+        && let Some(p) = Protocol::from_str(&proto)
+    {
+        return (p, ConfigSource::EnvGeneral);
     }
 
     // 4. Default per OTLP spec
@@ -405,10 +405,14 @@ mod tests {
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn clear_otel_env_vars() {
-        env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT");
-        env::remove_var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT");
-        env::remove_var("OTEL_EXPORTER_OTLP_PROTOCOL");
-        env::remove_var("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("OTEL_EXPORTER_OTLP_ENDPOINT") };
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") };
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("OTEL_EXPORTER_OTLP_PROTOCOL") };
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL") };
     }
 
     fn default_options() -> Options {
@@ -519,7 +523,8 @@ mod tests {
         clear_otel_env_vars();
 
         // Lua config takes priority over env vars
-        env::set_var("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc") };
         let options = Options {
             protocol: Some("http/json".to_string()),
             ..default_options()
@@ -537,8 +542,10 @@ mod tests {
         clear_otel_env_vars();
 
         // Traces-specific env var takes priority over general
-        env::set_var("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json");
-        env::set_var("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json") };
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc") };
         let (protocol, source) = resolve_protocol(&default_options());
         assert_eq!(protocol, Protocol::Grpc);
         assert_eq!(source, ConfigSource::EnvTracesSpecific);
@@ -551,7 +558,8 @@ mod tests {
         let _lock = ENV_LOCK.lock().unwrap();
         clear_otel_env_vars();
 
-        env::set_var("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc") };
         let (protocol, source) = resolve_protocol(&default_options());
         assert_eq!(protocol, Protocol::Grpc);
         assert_eq!(source, ConfigSource::EnvGeneral);
@@ -574,7 +582,8 @@ mod tests {
         let _lock = ENV_LOCK.lock().unwrap();
         clear_otel_env_vars();
 
-        env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://env:4318");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://env:4318") };
         let options = Options {
             endpoint: Some("http://127.0.0.1:4317/v1/traces".to_string()),
             ..default_options()
@@ -591,8 +600,10 @@ mod tests {
         let _lock = ENV_LOCK.lock().unwrap();
         clear_otel_env_vars();
 
-        env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://general:4318");
-        env::set_var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://traces:4318");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://general:4318") };
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://traces:4318") };
         let (endpoint, source) = resolve_endpoint(&default_options(), &Protocol::HttpProtobuf);
         assert_eq!(endpoint, "http://traces:4318");
         assert_eq!(source, ConfigSource::EnvTracesSpecific);
@@ -605,7 +616,8 @@ mod tests {
         let _lock = ENV_LOCK.lock().unwrap();
         clear_otel_env_vars();
 
-        env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://general:4318");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://general:4318") };
         let (endpoint, source) = resolve_endpoint(&default_options(), &Protocol::HttpProtobuf);
         assert_eq!(endpoint, "http://general:4318");
         assert_eq!(source, ConfigSource::EnvGeneral);
@@ -639,7 +651,8 @@ mod tests {
         clear_otel_env_vars();
 
         // Empty strings should be treated as unset
-        env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "") };
         let options = Options {
             endpoint: Some("".to_string()),
             ..default_options()
@@ -713,7 +726,8 @@ mod tests {
     #[test]
     fn test_resolve_log_level_default() {
         let _lock = ENV_LOCK.lock().unwrap();
-        env::remove_var("OTEL_LOG_LEVEL");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("OTEL_LOG_LEVEL") };
 
         let (level, source) = resolve_log_level();
         assert_eq!(level, LogLevel::Info);
@@ -724,30 +738,35 @@ mod tests {
     fn test_resolve_log_level_from_env() {
         let _lock = ENV_LOCK.lock().unwrap();
 
-        env::set_var("OTEL_LOG_LEVEL", "debug");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_LOG_LEVEL", "debug") };
         let (level, source) = resolve_log_level();
         assert_eq!(level, LogLevel::Debug);
         assert_eq!(source, ConfigSource::EnvGeneral);
 
-        env::set_var("OTEL_LOG_LEVEL", "error");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_LOG_LEVEL", "error") };
         let (level, source) = resolve_log_level();
         assert_eq!(level, LogLevel::Error);
         assert_eq!(source, ConfigSource::EnvGeneral);
 
-        env::remove_var("OTEL_LOG_LEVEL");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("OTEL_LOG_LEVEL") };
     }
 
     #[test]
     fn test_resolve_log_level_invalid_falls_back() {
         let _lock = ENV_LOCK.lock().unwrap();
 
-        env::set_var("OTEL_LOG_LEVEL", "invalid_value");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("OTEL_LOG_LEVEL", "invalid_value") };
         let (level, source) = resolve_log_level();
         // Falls back to default on invalid value (per spec, logs warning)
         assert_eq!(level, LogLevel::Info);
         assert_eq!(source, ConfigSource::Default);
 
-        env::remove_var("OTEL_LOG_LEVEL");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("OTEL_LOG_LEVEL") };
     }
 
     #[test]
