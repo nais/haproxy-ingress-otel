@@ -14,8 +14,8 @@ Use this image with the official [haproxytech/kubernetes-ingress](https://github
 # values.yaml
 controller:
   image:
-    repository: ghcr.io/nais/haproxy-ingress-otel
-    tag: "latest"  # or pin to specific version like "3.2.4-0.2.0"
+    repository:  europe-north1-docker.pkg.dev/nais-io/nais/images/haproxy-ingress-otel
+    tag: "latest"  # or pin to specific version like "2026-08-17-112329-e48cd55"
 
   extraEnvs:
     - name: OTEL_SERVICE_NAME
@@ -44,7 +44,7 @@ helm install haproxy-ingress haproxytech/kubernetes-ingress -f values.yaml
 Multi-arch images (amd64/arm64) are published to GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/nais/haproxy-ingress-otel:latest
+docker pull  europe-north1-docker.pkg.dev/nais-io/nais/images/haproxy-ingress-otel:latest
 ```
 
 ### Tags
@@ -243,7 +243,7 @@ defaults
 ```yaml
 controller:
   image:
-    repository: ghcr.io/nais/haproxy-ingress-otel
+    repository: europe-north1-docker.pkg.dev/nais-io/nais/images/haproxy-ingress-otel
     tag: "latest"  # or pin to specific version
 
   # OTEL configuration via environment
