@@ -4,7 +4,7 @@
 # Run 'mise run sync-versions' when updating versions.env.
 # =============================================================================
 ARG RUST_VERSION=1.97
-ARG HAPROXY_INGRESS_VERSION=3.2.12
+ARG HAPROXY_INGRESS_VERSION=3.2.13
 ARG HAPROXY_VERSION=3.2
 ARG S6_OVERLAY_VERSION=3.2.3.2
 
