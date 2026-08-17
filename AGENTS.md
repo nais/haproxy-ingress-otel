@@ -17,7 +17,7 @@ mise run sync-versions     # Propagate versions.env changes
 
 ## Tech Stack
 
-- **Language:** Rust 1.87 (cdylib for Lua FFI)
+- **Language:** Rust 1.97 (cdylib for Lua FFI)
 - **Target:** HAProxy 3.2.x Lua module
 - **Dependencies:** mlua, opentelemetry, tokio (multi-threaded runtime)
 - **Build:** Cargo workspace with three crates
