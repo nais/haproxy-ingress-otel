@@ -59,7 +59,7 @@ ENV S6_GROUP=haproxy
 USER root
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     socat \
     openssl \
     htop \
