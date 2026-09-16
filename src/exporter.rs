@@ -1,3 +1,5 @@
+#![allow(deprecated)] // Zipkin and Jaeger remain supported propagator options.
+
 use std::env;
 use std::error::Error as StdError;
 use std::fmt;
