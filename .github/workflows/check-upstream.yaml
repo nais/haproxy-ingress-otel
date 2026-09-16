@@ -18,6 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
 
+      - uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # ratchet:jdx/mise-action@v4
+        with:
+          install: false
+
       - name: Get current version
         id: current
         run: |
@@ -111,13 +115,18 @@ jobs:
           # Create branch and update versions
           git checkout -b "$BRANCH"
           sed -i "s/^HAPROXY_INGRESS_VERSION=.*/HAPROXY_INGRESS_VERSION=$LATEST_VERSION/" versions.env
+          HAPROXY_INGRESS_COMMIT=$(git ls-remote https://github.com/haproxytech/kubernetes-ingress.git "refs/tags/v${LATEST_VERSION}^{}" | cut -f1)
+          HAPROXY_INGRESS_IMAGE_DIGEST=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "docker.io/haproxytech/kubernetes-ingress:${LATEST_VERSION}")
+          BLOCK_SECRETS_SHA256=$(curl -fsSL "https://raw.githubusercontent.com/haproxytech/kubernetes-ingress/${HAPROXY_INGRESS_COMMIT}/pkg/protection/block_secrets.c" | sha256sum | cut -d' ' -f1)
+          HAPROXY_WRAPPER_SHA256=$(curl -fsSL "https://raw.githubusercontent.com/haproxytech/kubernetes-ingress/${HAPROXY_INGRESS_COMMIT}/pkg/protection/haproxy_wrapper.c" | sha256sum | cut -d' ' -f1)
+          test -n "$HAPROXY_INGRESS_COMMIT"
+          test -n "$HAPROXY_INGRESS_IMAGE_DIGEST"
+          sed -i "s/^HAPROXY_INGRESS_COMMIT=.*/HAPROXY_INGRESS_COMMIT=$HAPROXY_INGRESS_COMMIT/" versions.env
+          sed -i "s/^HAPROXY_INGRESS_IMAGE_DIGEST=.*/HAPROXY_INGRESS_IMAGE_DIGEST=$HAPROXY_INGRESS_IMAGE_DIGEST/" versions.env
+          sed -i "s/^BLOCK_SECRETS_SHA256=.*/BLOCK_SECRETS_SHA256=$BLOCK_SECRETS_SHA256/" versions.env
+          sed -i "s/^HAPROXY_WRAPPER_SHA256=.*/HAPROXY_WRAPPER_SHA256=$HAPROXY_WRAPPER_SHA256/" versions.env
 
-          # Run sync-versions (cross-platform version)
-          source versions.env
-          sed -i "s|^ARG RUST_VERSION=.*|ARG RUST_VERSION=$RUST_VERSION|" Dockerfile
-          sed -i "s|^ARG HAPROXY_INGRESS_VERSION=.*|ARG HAPROXY_INGRESS_VERSION=$HAPROXY_INGRESS_VERSION|" Dockerfile
-          sed -i "s|^ARG HAPROXY_VERSION=.*|ARG HAPROXY_VERSION=$HAPROXY_VERSION|" Dockerfile
-          sed -i "s|haproxytech/kubernetes-ingress:[0-9.]*|haproxytech/kubernetes-ingress:$HAPROXY_INGRESS_VERSION|g" e2e/k8s/02-haproxy-ingress.yaml
+          mise run sync-versions
 
           # Commit and push
           git add -A
