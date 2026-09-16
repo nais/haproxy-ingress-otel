@@ -14,8 +14,11 @@ FROM rust:${RUST_VERSION}-bookworm AS rust-builder
 
 WORKDIR /build
 
-# Install build dependencies (no openssl needed - using rustls)
+# Build the OTEL module and ingress protection binaries against glibc.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    curl \
+    gcc \
+    libc6-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
@@ -30,6 +33,26 @@ RUN sed -i 's/, "tests"//' Cargo.toml && sed -i 's/"tests", //' Cargo.toml
 
 # Build the module in release mode
 RUN cargo fetch && cargo build --release -p haproxy-otel-module
+
+# HAProxy Ingress builds these in Alpine, but the final image uses glibc.
+# Rebuild them here to avoid loading a musl interposer into HAProxy workers.
+ARG HAPROXY_INGRESS_VERSION
+RUN curl -fsSL \
+        "https://raw.githubusercontent.com/haproxytech/kubernetes-ingress/v${HAPROXY_INGRESS_VERSION}/pkg/protection/block_secrets.c" \
+        -o /build/block_secrets.c && \
+    curl -fsSL \
+        "https://raw.githubusercontent.com/haproxytech/kubernetes-ingress/v${HAPROXY_INGRESS_VERSION}/pkg/protection/haproxy_wrapper.c" \
+        -o /build/haproxy_wrapper.c && \
+    gcc -O3 -std=c11 -pipe -fPIC -shared -s \
+        -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fstack-clash-protection \
+        -fno-omit-frame-pointer -flto \
+        -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,--as-needed -Wl,-z,defs \
+        -o /build/libblock_secrets.so /build/block_secrets.c -ldl && \
+    gcc -O3 -std=c11 -pipe -s \
+        -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fstack-clash-protection \
+        -fno-omit-frame-pointer -fPIE -pie \
+        -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,--as-needed \
+        -o /build/haproxy_wrapper /build/haproxy_wrapper.c
 
 # =============================================================================
 # Source stage: Extract binaries from official HAProxy Ingress Controller
@@ -57,24 +80,16 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     tzdata \
     libcap2-bin \
     ca-certificates \
-    musl \
-    && case "$(dpkg --print-architecture)" in \
-        amd64) MUSL_ARCH=x86_64 ;; \
-        arm64) MUSL_ARCH=aarch64 ;; \
-        armhf) MUSL_ARCH=armhf ;; \
-        *) echo "Unsupported musl architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
-    esac \
-    && ln -sf "/lib/ld-musl-${MUSL_ARCH}.so.1" "/lib/libc.musl-${MUSL_ARCH}.so.1" \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the 3.2.15 ingress runtime and its gopherd supervisor configuration.
 COPY --from=ingress-source /haproxy-ingress-controller /haproxy-ingress-controller
-COPY --from=ingress-source /usr/local/sbin/haproxy_wrapper /usr/local/sbin/haproxy_wrapper
 COPY --from=ingress-source /usr/local/sbin/gopherd /usr/local/sbin/gopherd
-COPY --from=ingress-source /usr/local/lib/libblock_secrets.so /usr/local/lib/libblock_secrets.so
 COPY --from=ingress-source /etc/gopherd/gopherd.yml /etc/gopherd/gopherd.yml
 COPY --from=ingress-source /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
 COPY --from=ingress-source /etc/haproxy/errors /etc/haproxy/errors
+COPY --from=rust-builder /build/haproxy_wrapper /usr/local/sbin/haproxy_wrapper
+COPY --from=rust-builder /build/libblock_secrets.so /usr/local/lib/libblock_secrets.so
 
 # Create Lua module directory and copy OTEL module
 RUN mkdir -p /usr/local/lib/lua/5.4 /etc/haproxy/lua /var/lib/haproxy
