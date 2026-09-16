@@ -33,7 +33,6 @@ jobs:
     outputs:
       haproxy_ingress: ${{ steps.versions.outputs.HAPROXY_INGRESS_VERSION }}
       haproxy: ${{ steps.versions.outputs.HAPROXY_VERSION }}
-      s6_overlay: ${{ steps.versions.outputs.S6_OVERLAY_VERSION }}
       rust: ${{ steps.versions.outputs.RUST_VERSION }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7

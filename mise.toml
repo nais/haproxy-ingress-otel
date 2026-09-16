@@ -54,7 +54,6 @@ sedi() {
 sedi "s|^ARG RUST_VERSION=.*|ARG RUST_VERSION=$RUST_VERSION|" Dockerfile
 sedi "s|^ARG HAPROXY_INGRESS_VERSION=.*|ARG HAPROXY_INGRESS_VERSION=$HAPROXY_INGRESS_VERSION|" Dockerfile
 sedi "s|^ARG HAPROXY_VERSION=.*|ARG HAPROXY_VERSION=$HAPROXY_VERSION|" Dockerfile
-sedi "s|^ARG S6_OVERLAY_VERSION=.*|ARG S6_OVERLAY_VERSION=$S6_OVERLAY_VERSION|" Dockerfile
 
 # Update e2e K8s manifest
 sedi "s|haproxytech/kubernetes-ingress:[0-9.]*|haproxytech/kubernetes-ingress:$HAPROXY_INGRESS_VERSION|g" e2e/k8s/02-haproxy-ingress.yaml
@@ -81,7 +80,6 @@ check() {
 
 check Dockerfile "^ARG HAPROXY_INGRESS_VERSION=" "$HAPROXY_INGRESS_VERSION" "HAPROXY_INGRESS_VERSION"
 check Dockerfile "^ARG HAPROXY_VERSION=" "$HAPROXY_VERSION" "HAPROXY_VERSION"
-check Dockerfile "^ARG S6_OVERLAY_VERSION=" "$S6_OVERLAY_VERSION" "S6_OVERLAY_VERSION"
 check Dockerfile "^ARG RUST_VERSION=" "$RUST_VERSION" "RUST_VERSION"
 check e2e/k8s/02-haproxy-ingress.yaml "image: haproxytech/kubernetes-ingress:" "$HAPROXY_INGRESS_VERSION" "e2e manifest"
 

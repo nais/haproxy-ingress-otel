@@ -117,7 +117,6 @@ jobs:
           sed -i "s|^ARG RUST_VERSION=.*|ARG RUST_VERSION=$RUST_VERSION|" Dockerfile
           sed -i "s|^ARG HAPROXY_INGRESS_VERSION=.*|ARG HAPROXY_INGRESS_VERSION=$HAPROXY_INGRESS_VERSION|" Dockerfile
           sed -i "s|^ARG HAPROXY_VERSION=.*|ARG HAPROXY_VERSION=$HAPROXY_VERSION|" Dockerfile
-          sed -i "s|^ARG S6_OVERLAY_VERSION=.*|ARG S6_OVERLAY_VERSION=$S6_OVERLAY_VERSION|" Dockerfile
           sed -i "s|haproxytech/kubernetes-ingress:[0-9.]*|haproxytech/kubernetes-ingress:$HAPROXY_INGRESS_VERSION|g" e2e/k8s/02-haproxy-ingress.yaml
 
           # Commit and push
@@ -161,38 +160,6 @@ jobs:
           # Trigger CI workflow on the PR branch so checks appear on the PR
           # (PRs created by github-actions[bot] don't trigger pull_request workflows)
           gh workflow run ci.yaml --ref "$BRANCH"
-
-  check-s6-overlay:
-    name: Check s6-overlay
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
-
-      - name: Get current version
-        id: current
-        run: |
-          set -euo pipefail
-          CURRENT=$(grep 'S6_OVERLAY_VERSION=' versions.env | cut -d= -f2)
-          echo "version=$CURRENT" >> $GITHUB_OUTPUT
-
-      - name: Get latest upstream version
-        id: upstream
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          LATEST=$(gh api repos/just-containers/s6-overlay/releases/latest --jq '.tag_name' | sed 's/^v//')
-          echo "version=$LATEST" >> $GITHUB_OUTPUT
-
-      - name: Compare versions
-        run: |
-          CURRENT="${{ steps.current.outputs.version }}"
-          LATEST="${{ steps.upstream.outputs.version }}"
-          if [ "$CURRENT" != "$LATEST" ]; then
-            echo "::notice::s6-overlay update available: $LATEST (current: $CURRENT)"
-          else
-            echo "::notice::s6-overlay up to date: $CURRENT"
-          fi
 
   check-rust:
     name: Check Rust Toolchain
