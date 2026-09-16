@@ -55,7 +55,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     openssl \
     htop \
     tzdata \
-    curl \
     libcap2-bin \
     ca-certificates \
     musl \
