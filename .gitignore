@@ -1,4 +1,5 @@
 /target
+Cargo.lock
 
 # Local build directory (HAProxy, Lua)
 .local/
