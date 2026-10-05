@@ -72,7 +72,8 @@ ARG HAPROXY_INGRESS_VERSION
 
 USER root
 
-# Install runtime dependencies
+# Install runtime dependencies. The base image's "libpcre2-*" install pulls in
+# libpcre2-dev -> libc6-dev -> linux-libc-dev; headers aren't needed at runtime.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     socat \
     openssl \
@@ -80,6 +81,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     tzdata \
     libcap2-bin \
     ca-certificates \
+    && apt-get purge -y --auto-remove libpcre2-dev libc6-dev linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the 3.2.15 ingress runtime and its gopherd supervisor configuration.
