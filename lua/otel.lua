@@ -54,7 +54,7 @@ opentelemetry.register({
 })
 
 core.Info("OpenTelemetry initialized: service=" .. service_name ..
-          " endpoint=" .. endpoint ..
+          " endpoint=" .. (endpoint or "default") ..
           " sampler=" .. sampler ..
           " propagator=" .. propagator)
 

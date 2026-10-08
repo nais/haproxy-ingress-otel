@@ -304,7 +304,6 @@ All versions are defined in [`versions.env`](versions.env). A GitHub workflow ch
 | Component       | Source                                                                              |
 | --------------- | ----------------------------------------------------------------------------------- |
 | HAProxy Ingress | [haproxytech/kubernetes-ingress](https://github.com/haproxytech/kubernetes-ingress) |
-| s6-overlay      | [just-containers/s6-overlay](https://github.com/just-containers/s6-overlay)         |
 
 ## Upstream
 

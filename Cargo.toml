@@ -3,6 +3,7 @@ name = "haproxy-otel"
 version = "0.2.0"
 authors = ["Aleksandr Orlenko <zxteam@pm.me>", "NAIS <nais@nav.no>"]
 edition = "2024"
+rust-version = "1.97"
 repository = "https://github.com/nais/haproxy-otel"
 autotests = false
 readme = "README.md"
@@ -14,7 +15,7 @@ description = "HAProxy Kubernetes Ingress Controller with OpenTelemetry tracing"
 members = ["module", "tests"]
 
 [dependencies]
-mlua = { version = "0.11.1", features = ["macros"] }
+mlua = { version = "0.11.1" }
 haproxy-api = { version = "0.9.0" }
 opentelemetry = { version = "0.32.0", default-features = false, features = [
     "trace",
