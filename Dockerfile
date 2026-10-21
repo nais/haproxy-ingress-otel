@@ -4,7 +4,7 @@
 # Run 'mise run sync-versions' when updating versions.env.
 # =============================================================================
 ARG RUST_VERSION=1.97
-ARG HAPROXY_INGRESS_VERSION=3.2.16
+ARG HAPROXY_INGRESS_VERSION=3.2.17
 ARG HAPROXY_VERSION=3.2
 
 # =============================================================================
@@ -23,7 +23,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace files
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 COPY .cargo ./.cargo
 COPY src ./src
 COPY module ./module
