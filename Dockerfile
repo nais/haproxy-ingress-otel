@@ -72,9 +72,13 @@ ARG HAPROXY_INGRESS_VERSION
 
 USER root
 
+# Changes per CI run so the apt layer below is never reused from the build
+# cache and always picks up the latest Debian security updates.
+ARG APT_CACHE_BUST
+
 # Install runtime dependencies. The base image's "libpcre2-*" install pulls in
 # libpcre2-dev -> libc6-dev -> linux-libc-dev; headers aren't needed at runtime.
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+RUN echo "apt cache bust: ${APT_CACHE_BUST}" && apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     socat \
     openssl \
     htop \

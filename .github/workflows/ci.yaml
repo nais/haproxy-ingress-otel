@@ -232,3 +232,5 @@ jobs:
           google_service_account: gh-${{ env.NAME }}
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
           push: true
+          build_args: |
+            APT_CACHE_BUST=${{ github.run_id }}-${{ github.run_attempt }}
