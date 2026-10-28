@@ -1,7 +1,7 @@
 //! Jaeger (`uber-trace-id`) propagator, vendored from opentelemetry-jaeger-propagator 0.32.0
 //! (Apache-2.0, https://github.com/open-telemetry/opentelemetry-rust). Upstream removed the
 //! crate in 0.33; kept here so `propagator = "jaeger"` keeps working.
-#![allow(dead_code)]
+#![allow(dead_code, unexpected_cfgs)] // otel_warn! checks a cfg this crate does not define
 
 use opentelemetry::{
     Context, otel_warn,
