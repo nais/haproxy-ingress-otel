@@ -4,10 +4,9 @@
 #![allow(dead_code)]
 
 use opentelemetry::{
-    otel_warn,
-    propagation::{text_map_propagator::FieldIter, Extractor, Injector, TextMapPropagator},
+    Context, otel_warn,
+    propagation::{Extractor, Injector, TextMapPropagator, text_map_propagator::FieldIter},
     trace::{SpanContext, SpanId, TraceContextExt, TraceFlags, TraceId, TraceState},
-    Context,
 };
 use std::borrow::Cow;
 use std::str::FromStr;
@@ -223,4 +222,3 @@ impl TextMapPropagator for Propagator {
         FieldIter::new(self.fields.as_ref())
     }
 }
-
