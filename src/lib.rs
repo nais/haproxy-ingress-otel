@@ -50,4 +50,5 @@ pub fn register(lua: &Lua, options: LuaTable) -> LuaResult<()> {
 mod cache;
 mod exporter;
 mod filter;
+mod jaeger;
 mod span;

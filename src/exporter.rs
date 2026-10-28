@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
 use tokio::runtime::Runtime;
 
-use opentelemetry_jaeger_propagator as opentelemetry_jaeger;
+use crate::jaeger as opentelemetry_jaeger;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::propagation::TraceContextPropagator;

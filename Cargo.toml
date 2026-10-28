@@ -17,32 +17,31 @@ members = ["module", "tests"]
 [dependencies]
 mlua = { version = "0.11.1" }
 haproxy-api = { version = "0.9.0" }
-opentelemetry = { version = "0.32.0", default-features = false, features = [
+opentelemetry = { version = "0.33.1", default-features = false, features = [
     "trace",
 ] }
-opentelemetry_sdk = { version = "0.32.1", default-features = false, features = [
+opentelemetry_sdk = { version = "0.33.1", default-features = false, features = [
     "trace",
     "rt-tokio",
     "experimental_trace_batch_span_processor_with_async_runtime",
 ] }
-opentelemetry-semantic-conventions = { version = "0.32.1", features = [
+opentelemetry-semantic-conventions = { version = "0.33.1", features = [
     "semconv_experimental",
 ] }
-opentelemetry-http = "0.32.0"
-opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
+opentelemetry-http = "0.33.1"
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = [
     "http-proto",
     "http-json",
     "grpc-tonic",
     "trace",
     "reqwest-client",
 ] }
-opentelemetry-zipkin = { version = "0.32.0", default-features = false }
-opentelemetry-jaeger-propagator = "0.32.0"
+opentelemetry-zipkin = { version = "0.33.0", default-features = false }
 quick_cache = "0.6.14"
 const-hex = "1.14.1"
 # Override reqwest to use rustls instead of native-tls (avoids glibc __res_init)
-reqwest = { version = "0.12", default-features = false, features = [
-    "rustls-tls",
+reqwest = { version = "0.13.5", default-features = false, features = [
+    "rustls",
     "http2",
     "hickory-dns",
 ] }
