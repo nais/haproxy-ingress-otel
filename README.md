@@ -77,6 +77,11 @@ All environment variable names follow the [OTLP specification](https://opentelem
 - For `OTEL_EXPORTER_OTLP_ENDPOINT`: The `/v1/traces` path is automatically appended for HTTP protocols
 - For `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`: Used as-is without modification
 
+**TLS and retries:**
+
+- HTTPS endpoints are verified against the OS trust store (reqwest 0.13 with rustls-platform-verifier). `SSL_CERT_FILE` is honoured, so you can point it at a custom CA bundle.
+- Failed OTLP exports are retried by default (3 retries).
+
 ### Sampler Values
 
 | Value                   | Description                 |
@@ -314,4 +319,4 @@ This project builds on:
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE), except `src/jaeger.rs`, which is vendored from opentelemetry-jaeger-propagator 0.32.0 and licensed under [Apache-2.0](LICENSE-APACHE).

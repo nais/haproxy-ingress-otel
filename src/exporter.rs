@@ -1,4 +1,4 @@
-#![allow(deprecated)] // Zipkin and Jaeger remain supported propagator options.
+#![allow(deprecated)] // opentelemetry-zipkin is deprecated; the Zipkin propagator stays supported.
 
 use std::env;
 use std::error::Error as StdError;
@@ -7,7 +7,6 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
 use tokio::runtime::Runtime;
 
-use opentelemetry_jaeger_propagator as opentelemetry_jaeger;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
@@ -313,7 +312,7 @@ fn do_init(options: Options) -> Result<(), Box<dyn StdError + Send + Sync + 'sta
             opentelemetry::global::set_text_map_propagator(opentelemetry_zipkin::Propagator::new());
         }
         "jaeger" => {
-            opentelemetry::global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+            opentelemetry::global::set_text_map_propagator(crate::jaeger::Propagator::new());
         }
         _ => {
             // Default to w3c for unknown propagators
