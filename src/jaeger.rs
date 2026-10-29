@@ -1,3 +1,7 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+// Vendored from opentelemetry-jaeger-propagator 0.32.0.
+
 //! Jaeger (`uber-trace-id`) propagator, vendored from opentelemetry-jaeger-propagator 0.32.0
 //! (Apache-2.0, https://github.com/open-telemetry/opentelemetry-rust). Upstream removed the
 //! crate in 0.33; kept here so `propagator = "jaeger"` keeps working.
@@ -9,7 +13,6 @@ use opentelemetry::{
     trace::{SpanContext, SpanId, TraceContextExt, TraceFlags, TraceId, TraceState},
 };
 use std::borrow::Cow;
-use std::str::FromStr;
 
 const JAEGER_HEADER: &str = "uber-trace-id";
 const JAEGER_BAGGAGE_PREFIX: &str = "uberctx-";
@@ -148,7 +151,7 @@ impl Propagator {
         if flag.len() > 2 {
             return Err(());
         }
-        let flag = u8::from_str(flag).map_err(|_| ())?;
+        let flag = u8::from_str_radix(flag, 16).map_err(|_| ())?;
         if flag & 0x01 == 0x01 {
             if flag & 0x02 == 0x02 {
                 Ok(TraceFlags::SAMPLED | TRACE_FLAG_DEBUG)
@@ -181,7 +184,8 @@ impl Propagator {
                     message = "Invalid trace state",
                     reason = format!("{:?}", trace_state_err),
                 );
-                Err(()) //todo: assign an error type instead of using ()
+                // Invalid baggage must not discard the trace context.
+                Ok(TraceState::default())
             }
         }
     }
@@ -220,5 +224,557 @@ impl TextMapPropagator for Propagator {
 
     fn fields(&self) -> FieldIter<'_> {
         FieldIter::new(self.fields.as_ref())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use opentelemetry::testing::trace::TestSpan;
+    use std::collections::HashMap;
+
+    const LONG_TRACE_ID_STR: &str = "000000000000004d0000000000000016";
+    const SHORT_TRACE_ID_STR: &str = "4d0000000000000016";
+    const TRACE_ID: u128 = 0x0000_0000_0000_004d_0000_0000_0000_0016;
+    const SPAN_ID_STR: &str = "0000000000017c29";
+    const SHORT_SPAN_ID_STR: &str = "17c29";
+    const SPAN_ID: u64 = 0x0000_0000_0001_7c29;
+
+    fn get_extract_data() -> Vec<(&'static str, &'static str, u8, SpanContext)> {
+        vec![
+            (
+                LONG_TRACE_ID_STR,
+                SPAN_ID_STR,
+                1,
+                SpanContext::new(
+                    TraceId::from(TRACE_ID),
+                    SpanId::from(SPAN_ID),
+                    TraceFlags::SAMPLED,
+                    true,
+                    TraceState::default(),
+                ),
+            ),
+            (
+                SHORT_TRACE_ID_STR,
+                SPAN_ID_STR,
+                1,
+                SpanContext::new(
+                    TraceId::from(TRACE_ID),
+                    SpanId::from(SPAN_ID),
+                    TraceFlags::SAMPLED,
+                    true,
+                    TraceState::default(),
+                ),
+            ),
+            (
+                SHORT_TRACE_ID_STR,
+                SHORT_SPAN_ID_STR,
+                1,
+                SpanContext::new(
+                    TraceId::from(TRACE_ID),
+                    SpanId::from(SPAN_ID),
+                    TraceFlags::SAMPLED,
+                    true,
+                    TraceState::default(),
+                ),
+            ),
+            (
+                LONG_TRACE_ID_STR,
+                SPAN_ID_STR,
+                3,
+                SpanContext::new(
+                    TraceId::from(TRACE_ID),
+                    SpanId::from(SPAN_ID),
+                    TRACE_FLAG_DEBUG | TraceFlags::SAMPLED,
+                    true,
+                    TraceState::default(),
+                ),
+            ),
+            (
+                LONG_TRACE_ID_STR,
+                SPAN_ID_STR,
+                0,
+                SpanContext::new(
+                    TraceId::from(TRACE_ID),
+                    SpanId::from(SPAN_ID),
+                    TraceFlags::default(),
+                    true,
+                    TraceState::default(),
+                ),
+            ),
+            (
+                "invalidtractid",
+                SPAN_ID_STR,
+                0,
+                SpanContext::empty_context(),
+            ),
+            (
+                LONG_TRACE_ID_STR,
+                "invalidspanID",
+                0,
+                SpanContext::empty_context(),
+            ),
+            (
+                LONG_TRACE_ID_STR,
+                SPAN_ID_STR,
+                120,
+                SpanContext::empty_context(),
+            ),
+        ]
+    }
+
+    fn get_inject_data() -> Vec<(SpanContext, String)> {
+        vec![
+            (
+                SpanContext::new(
+                    TraceId::from(TRACE_ID),
+                    SpanId::from(SPAN_ID),
+                    TraceFlags::SAMPLED,
+                    true,
+                    TraceState::default(),
+                ),
+                format!("{LONG_TRACE_ID_STR}:{SPAN_ID_STR}:0:1"),
+            ),
+            (
+                SpanContext::new(
+                    TraceId::from(TRACE_ID),
+                    SpanId::from(SPAN_ID),
+                    TraceFlags::default(),
+                    true,
+                    TraceState::default(),
+                ),
+                format!("{LONG_TRACE_ID_STR}:{SPAN_ID_STR}:0:0"),
+            ),
+            (
+                SpanContext::new(
+                    TraceId::from(TRACE_ID),
+                    SpanId::from(SPAN_ID),
+                    TRACE_FLAG_DEBUG | TraceFlags::SAMPLED,
+                    true,
+                    TraceState::default(),
+                ),
+                format!("{LONG_TRACE_ID_STR}:{SPAN_ID_STR}:0:3"),
+            ),
+        ]
+    }
+
+    /// Try to extract the context using the created Propagator with custom header name
+    /// from the Extractor under the `context_key` key.
+    fn _test_extract_with_header(construct_header: &'static str, context_key: &'static str) {
+        let propagator = Propagator::with_custom_header(construct_header);
+        for (trace_id, span_id, flag, expected) in get_extract_data() {
+            let mut map: HashMap<String, String> = HashMap::new();
+            map.set(context_key, format!("{trace_id}:{span_id}:0:{flag}"));
+            let context = propagator.extract(&map);
+            assert_eq!(context.span().span_context(), &expected);
+        }
+    }
+
+    /// Try to inject the context using the created Propagator with custom header name
+    /// and expect the serialized context existence under `expect_header` key.
+    fn _test_inject_with_header(construct_header: &'static str, expect_header: &'static str) {
+        let propagator = Propagator::with_custom_header(construct_header);
+        for (span_context, header_value) in get_inject_data() {
+            let mut injector = HashMap::new();
+            propagator.inject_context(
+                &Context::current_with_span(TestSpan(span_context)),
+                &mut injector,
+            );
+            assert_eq!(injector.get(expect_header), Some(&header_value));
+        }
+    }
+
+    #[test]
+    fn test_propagator_creation_methods() {
+        // Without specifying any custom header or baggage prefix, the header and prefix wil be the default values
+        let default_propagator = Propagator::new();
+        assert_eq!(default_propagator.header_name, JAEGER_HEADER);
+        assert_eq!(default_propagator.baggage_prefix, JAEGER_BAGGAGE_PREFIX);
+
+        // Propagators are cloneable
+        let cloned_propagator = default_propagator.clone();
+        assert_eq!(
+            default_propagator.header_name,
+            cloned_propagator.header_name
+        );
+
+        // Propagators implement debug
+        assert_eq!(
+            format!("{default_propagator:?}"),
+            format!(
+                "Propagator {{ baggage_prefix: \"{}\", header_name: \"{}\", fields: [\"{}\"] }}",
+                JAEGER_BAGGAGE_PREFIX, JAEGER_HEADER, JAEGER_HEADER
+            )
+        );
+
+        let custom_header_propagator = Propagator::with_custom_header("custom-header");
+        assert_eq!(custom_header_propagator.header_name, "custom-header");
+        assert_eq!(
+            custom_header_propagator.baggage_prefix,
+            JAEGER_BAGGAGE_PREFIX
+        );
+
+        // An empty custom header will result in the default header name
+        let propgator_with_empty_custom_header = Propagator::with_custom_header("");
+        assert_eq!(
+            propgator_with_empty_custom_header.header_name,
+            JAEGER_HEADER
+        );
+        assert_eq!(
+            propgator_with_empty_custom_header.baggage_prefix,
+            JAEGER_BAGGAGE_PREFIX
+        );
+
+        let propagator_with_custom_header_and_baggage_prefixes =
+            Propagator::with_custom_header_and_baggage("custom-header", "custom-baggage-prefix");
+        assert_eq!(
+            propagator_with_custom_header_and_baggage_prefixes.header_name,
+            "custom-header"
+        );
+        assert_eq!(
+            propagator_with_custom_header_and_baggage_prefixes.baggage_prefix,
+            "custom-baggage-prefix"
+        );
+
+        let propagator_with_empty_prefix =
+            Propagator::with_custom_header_and_baggage("custom-header", "");
+        assert_eq!(propagator_with_empty_prefix.header_name, "custom-header");
+        assert_eq!(
+            propagator_with_empty_prefix.baggage_prefix,
+            JAEGER_BAGGAGE_PREFIX
+        );
+    }
+
+    #[test]
+    fn test_extract_span_context() {
+        let propagator_with_custom_header =
+            Propagator::with_custom_header_and_baggage("custom_header", "custom_baggage");
+        let mut map: HashMap<String, String> = HashMap::new();
+        map.insert(
+            "custom_header".to_owned(),
+            "12345:54321:ignored_parent_span_id:3".to_owned(),
+        );
+        assert_eq!(
+            propagator_with_custom_header.extract_span_context(&map),
+            Some(SpanContext::new(
+                TraceId::from_hex("12345").unwrap(),
+                SpanId::from_hex("54321").unwrap(),
+                TRACE_FLAG_DEBUG | TraceFlags::SAMPLED,
+                true,
+                TraceState::default(),
+            ))
+        );
+
+        map.clear();
+        let mut map: HashMap<String, String> = HashMap::new();
+        map.insert(
+            "custom_header".to_owned(),
+            "12345%3A54321%3Aignored_parent_span_id%3A3".to_owned(), // URL encoded
+        );
+        assert_eq!(
+            propagator_with_custom_header.extract_span_context(&map),
+            Some(SpanContext::new(
+                TraceId::from_hex("12345").unwrap(),
+                SpanId::from_hex("54321").unwrap(),
+                TRACE_FLAG_DEBUG | TraceFlags::SAMPLED,
+                true,
+                TraceState::default(),
+            ))
+        );
+
+        map.clear();
+        map.set(
+            "custom_header",
+            "not:4:parts:long:delimited:by:colons".to_owned(),
+        );
+        assert_eq!(
+            propagator_with_custom_header.extract_span_context(&map),
+            None,
+        );
+
+        map.clear();
+        map.set(
+            "custom_header",
+            "invalid_trace_id:54321:ignored_parent_span_id:3".to_owned(),
+        );
+        assert_eq!(
+            propagator_with_custom_header.extract_span_context(&map),
+            None,
+        );
+
+        map.clear();
+        map.set(
+            "custom_header",
+            "12345:invalid_span_id:ignored_parent_span_id:3".to_owned(),
+        );
+        assert_eq!(
+            propagator_with_custom_header.extract_span_context(&map),
+            None,
+        );
+
+        map.clear();
+        map.set(
+            "custom_header",
+            "12345:54321:ignored_parent_span_id:invalid_flag".to_owned(),
+        );
+        assert_eq!(
+            propagator_with_custom_header.extract_span_context(&map),
+            None,
+        );
+
+        map.clear();
+        let mut map: HashMap<String, String> = HashMap::new();
+        map.set(
+            "custom_header",
+            "12345%3A54321%3Aignored_parent_span_id%3A3".to_owned(), // URL encoded
+        );
+        let too_long_baggage_key = format!("{}{}", "custom_baggage", "_".repeat(256)); // A baggage key cannot be longer than 256 characters
+        map.set(&too_long_baggage_key, "baggage_value".to_owned());
+        // Invalid baggage falls back to an empty TraceState instead of dropping the context.
+        assert_eq!(
+            propagator_with_custom_header.extract_span_context(&map),
+            Some(SpanContext::new(
+                TraceId::from_hex("12345").unwrap(),
+                SpanId::from_hex("54321").unwrap(),
+                TRACE_FLAG_DEBUG | TraceFlags::SAMPLED,
+                true,
+                TraceState::default(),
+            )),
+        );
+    }
+
+    #[test]
+    fn test_extract_trace_id() {
+        let propagator = Propagator::new();
+
+        assert_eq!(
+            propagator.extract_trace_id("12345"),
+            Ok(TraceId::from_hex("12345").unwrap())
+        );
+
+        // A trace cannot be more than 32 characters
+        assert_eq!(
+            propagator.extract_trace_id("1".repeat(33).as_str()),
+            Err(())
+        );
+
+        // A trace id must be a valid hex-string
+        assert_eq!(propagator.extract_trace_id("invalid"), Err(()));
+    }
+
+    #[test]
+    fn test_extract_span_id() {
+        let propgator = Propagator::new();
+        assert_eq!(propgator.extract_span_id("12345"), Ok(SpanId::from(74565)));
+
+        // Fail to extract span id with an invalid hex-string
+        assert_eq!(propgator.extract_span_id("invalid"), Err(()));
+
+        // Fail to extract span id with a hex-string that is too long
+        assert_eq!(propgator.extract_span_id("1".repeat(17).as_str()), Err(()));
+    }
+
+    #[test]
+    fn test_extract_trace_flags() {
+        let propgator = Propagator::new();
+
+        // Extract TraceFlags::SAMPLED flag
+        assert_eq!(propgator.extract_trace_flags("1"), Ok(TraceFlags::SAMPLED));
+
+        // Extract TraceFlags::DEBUG flag - requires TraceFlags::SAMPLED to be set
+        assert_eq!(
+            propgator.extract_trace_flags("3"),
+            Ok(TRACE_FLAG_DEBUG | TraceFlags::SAMPLED)
+        );
+
+        // Attempt to extract the TraceFlags::DEBUG flag without the TraceFlags::SAMPLED flag and receive the default TraceFlags
+        assert_eq!(
+            propgator.extract_trace_flags("2"),
+            Ok(TraceFlags::default())
+        );
+
+        // Flags are hex, matching inject: "b" (0x0b) is sampled + debug, "zz" is invalid
+        assert_eq!(
+            propgator.extract_trace_flags("b"),
+            Ok(TRACE_FLAG_DEBUG | TraceFlags::SAMPLED)
+        );
+        assert_eq!(propgator.extract_trace_flags("zz"), Err(()));
+    }
+
+    #[test]
+    fn test_extract_trace_state() {
+        let propagator = Propagator::with_custom_header_and_baggage("header", "baggage");
+
+        // When a type that implements Extractor has keys that start with the custom baggage prefix, they and their associated
+        // values are extracted into a TraceState
+        // In this case, no keys start with the custom baggage prefix
+        let mut map_of_keys_without_custom_baggage_prefix: HashMap<String, String> = HashMap::new();
+        map_of_keys_without_custom_baggage_prefix.set("different_prefix_1", "value_1".to_string());
+        let empty_trace_state = propagator
+            .extract_trace_state(&map_of_keys_without_custom_baggage_prefix)
+            .unwrap();
+        assert_eq!(empty_trace_state, TraceState::NONE);
+
+        // In this case, all keys start with the custom baggage prefix
+        let mut map_of_keys_with_custom_baggage_prefix: HashMap<String, String> = HashMap::new();
+        map_of_keys_with_custom_baggage_prefix.set("baggage_1", "value_1".to_string());
+
+        let trace_state = propagator
+            .extract_trace_state(&map_of_keys_with_custom_baggage_prefix)
+            .unwrap();
+        assert_eq!(
+            trace_state,
+            TraceState::from_key_value(vec![("baggage_1", "value_1")]).unwrap()
+        );
+
+        // If a key that starts with the custom baggage prefix is an invalid TraceState, fall back to the default
+        let too_long_baggage_key = format!("{}{}", "baggage_1", "_".repeat(256)); // A baggage key cannot be longer than 256 characters
+        let mut map_of_invalid_keys_with_custom_baggage_prefix: HashMap<String, String> =
+            HashMap::new();
+        map_of_invalid_keys_with_custom_baggage_prefix
+            .set(&too_long_baggage_key, "value_1".to_string());
+        assert_eq!(
+            propagator.extract_trace_state(&map_of_invalid_keys_with_custom_baggage_prefix),
+            Ok(TraceState::default())
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_context_with_invalid_baggage() {
+        let mut map: HashMap<String, String> = HashMap::new();
+        map.set(
+            JAEGER_HEADER,
+            format!("{LONG_TRACE_ID_STR}:{SPAN_ID_STR}:0:1"),
+        );
+        map.set(&format!("uberctx-{}", "a".repeat(300)), "v".to_owned());
+        let context = Propagator::new().extract(&map);
+        assert_eq!(
+            context.span().span_context(),
+            &SpanContext::new(
+                TraceId::from(TRACE_ID),
+                SpanId::from(SPAN_ID),
+                TraceFlags::SAMPLED,
+                true,
+                TraceState::default(),
+            )
+        );
+    }
+
+    #[test]
+    fn test_extract_empty() {
+        let map: HashMap<String, String> = HashMap::new();
+        let propagator = Propagator::new();
+        let context = propagator.extract(&map);
+        assert_eq!(context.span().span_context(), &SpanContext::empty_context())
+    }
+
+    #[test]
+    fn test_inject_extract_with_default() {
+        let propagator = Propagator::default();
+        for (span_context, header_value) in get_inject_data() {
+            let mut injector = HashMap::new();
+            propagator.inject_context(
+                &Context::current_with_span(TestSpan(span_context)),
+                &mut injector,
+            );
+            assert_eq!(injector.get(JAEGER_HEADER), Some(&header_value));
+        }
+        for (trace_id, span_id, flag, expected) in get_extract_data() {
+            let mut map: HashMap<String, String> = HashMap::new();
+            map.set(JAEGER_HEADER, format!("{trace_id}:{span_id}:0:{flag}"));
+            let context = propagator.extract(&map);
+            assert_eq!(context.span().span_context(), &expected);
+        }
+    }
+
+    #[test]
+    fn test_extract_too_many_parts() {
+        let mut map: HashMap<String, String> = HashMap::new();
+        map.set(
+            JAEGER_HEADER,
+            format!("{LONG_TRACE_ID_STR}:{SPAN_ID_STR}:0:1:aa"),
+        );
+        let propagator = Propagator::new();
+        let context = propagator.extract(&map);
+        assert_eq!(context.span().span_context(), &SpanContext::empty_context());
+    }
+
+    #[test]
+    fn test_extract_invalid_flag() {
+        let mut map: HashMap<String, String> = HashMap::new();
+        map.set(
+            JAEGER_HEADER,
+            format!("{LONG_TRACE_ID_STR}:{SPAN_ID_STR}:0:zz"),
+        );
+        let propagator = Propagator::new();
+        let context = propagator.extract(&map);
+        assert_eq!(context.span().span_context(), &SpanContext::empty_context());
+    }
+
+    #[test]
+    fn test_extract_from_url() {
+        let mut map: HashMap<String, String> = HashMap::new();
+        map.set(
+            JAEGER_HEADER,
+            format!("{LONG_TRACE_ID_STR}%3A{SPAN_ID_STR}%3A0%3A1"),
+        );
+        let propagator = Propagator::new();
+        let context = propagator.extract(&map);
+        assert_eq!(
+            context.span().span_context(),
+            &SpanContext::new(
+                TraceId::from(TRACE_ID),
+                SpanId::from(SPAN_ID),
+                TraceFlags::SAMPLED,
+                true,
+                TraceState::default(),
+            )
+        );
+    }
+
+    #[test]
+    fn test_extract() {
+        _test_extract_with_header(JAEGER_HEADER, JAEGER_HEADER)
+    }
+
+    #[test]
+    fn test_inject() {
+        _test_inject_with_header(JAEGER_HEADER, JAEGER_HEADER)
+    }
+
+    #[test]
+    fn test_extract_with_invalid_header() {
+        for construct in &["", "   "] {
+            _test_extract_with_header(construct, JAEGER_HEADER)
+        }
+    }
+
+    #[test]
+    fn test_extract_with_valid_header() {
+        for construct in &["custom-header", "custom-header   ", "   custom-header   "] {
+            _test_extract_with_header(construct, "custom-header")
+        }
+    }
+
+    #[test]
+    fn test_inject_with_invalid_header() {
+        for construct in &["", "   "] {
+            _test_inject_with_header(construct, JAEGER_HEADER)
+        }
+    }
+
+    #[test]
+    fn test_inject_with_valid_header() {
+        for construct in &["custom-header", "custom-header   ", "   custom-header   "] {
+            _test_inject_with_header(construct, "custom-header")
+        }
+    }
+
+    #[test]
+    fn test_fields() {
+        let propagator = Propagator::new();
+        let fields = propagator.fields().collect::<Vec<_>>();
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields.first().unwrap(), &JAEGER_HEADER);
     }
 }

@@ -8,7 +8,7 @@ repository = "https://github.com/nais/haproxy-otel"
 autotests = false
 readme = "README.md"
 keywords = ["haproxy", "opentelemetry", "kubernetes", "ingress"]
-license = "MIT"
+license = "MIT AND Apache-2.0"
 description = "HAProxy Kubernetes Ingress Controller with OpenTelemetry tracing"
 
 [workspace]
@@ -46,3 +46,6 @@ reqwest = { version = "0.13.5", default-features = false, features = [
     "hickory-dns",
 ] }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "rt"] }
+
+[dev-dependencies]
+opentelemetry = { version = "0.33.1", features = ["testing"] }
