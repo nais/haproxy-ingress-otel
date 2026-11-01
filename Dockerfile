@@ -78,6 +78,8 @@ ARG APT_CACHE_BUST
 
 # Install runtime dependencies. The base image's "libpcre2-*" install pulls in
 # libpcre2-dev -> libc6-dev -> linux-libc-dev; headers aren't needed at runtime.
+# The base image only uses curl at build time to fetch dataplaneapi; nothing in
+# this image uses curl or libcurl at runtime, so remove it and its dependencies.
 RUN echo "apt cache bust: ${APT_CACHE_BUST}" && apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     socat \
     openssl \
@@ -85,7 +87,7 @@ RUN echo "apt cache bust: ${APT_CACHE_BUST}" && apt-get update && apt-get upgrad
     tzdata \
     libcap2-bin \
     ca-certificates \
-    && apt-get purge -y --auto-remove libpcre2-dev libc6-dev linux-libc-dev \
+    && apt-get purge -y --auto-remove libpcre2-dev libc6-dev linux-libc-dev curl libcurl4t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the 3.2.15 ingress runtime and its gopherd supervisor configuration.

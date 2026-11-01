@@ -143,7 +143,7 @@ Configuration sources are shown in parentheses: `lua config`, `env (traces-speci
 
 1. Verify the Lua module is loaded - check HAProxy logs for the startup message
 2. Verify `lua-load-per-thread` directive is in your HAProxy config
-3. Check endpoint connectivity: `curl -v http://collector:4318/v1/traces`
+3. Check endpoint connectivity: `curl -v http://collector:4318/v1/traces` (the image does not ship `curl`; run it from a debug container, e.g. `kubectl debug -it <pod> --image=curlimages/curl -- sh`)
 4. Verify the frontend snippets are applied (check HAProxy config dump)
 
 **Traces show 00000000... for trace IDs:**
